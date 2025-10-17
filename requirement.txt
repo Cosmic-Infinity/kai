@@ -1,0 +1,24 @@
+A IoT Dashboard/Control System for automation.
+
+I have a large organization, with cameras in all rooms. I want to save energy.
+I have a system in mind to automatically turn off appliances when no one is in a room.
+
+The system Comprises of:
+
+1. Image Server : captures static frames from camera feeds (for now assume the image frames are available in folder images_src), every 1 minute. Originally the files are named in the format CAM_anynamehere.jpg. The server renames the frame as CAM_anynamehere_YES/NO.jpg, 'YES' signifying there is a human present in the room, NO meaning otherwise. To achieve that, it runs a lightweight+accurate ML model (yolov8 here) to detect if a person is present in the room. The image server reads from an MQTT feed (force_request) where there may be request like "FORCE_UPDATE_CAM_anynamehere" which will cause the system to immediately fetch a frame from that camera, run it through the model, and write the results UPDATED_CAM_anynamehere to another feed (force_served) once the image is ready in format CAM_anynamehere_YES/NO.jpg
+
+2. Dashboard : An UI frontend written in Kivy. The dashboard shows all the camera feeds available on the image server. It updates every 30s (fetches the images). If it sees a YES on the image status, adds a green border to the image element in the ui, or a red border otherwise. Every camera/image gets 2 controls, a request_force_update, and toggle_status. The request_force_update button writes to the force_request feed, and waits till it gets a confirmation of successfully updated image on the force_served feed, at which point it fetches the image for the camera from the image server. The toggle_status writes a opposite value to the current status of the camera to another feed "Control". the writes can be SET_CAM_anynamehere_OFF/ON.
+
+3. Control Server : The control server reads from the image server every 30s, if it observes a camera is continuously in status "NO" 10 times, then it writes to a mqtt feed POWER, the value CAM_anynamehere_OFF. The control server also reads the Control feed, where if it reads SET_CAM_anynamehere_OFF/ON, it subsequently writes to the POWER feed the values CAM_anynamehere_OFF or CAM_anynamehere_ON
+
+
+
+Hence we have 3 applications :
+1. Image Processing : capture frames, tag their status
+2. Dashboard : UI, shows the user camera status, and provides control to get an immediate status of the camera, and to send control commands to the Control system.
+3. Control System : Turns appliances ON/OFF depending on if there is inactivity in the room, or if requested by the user via the dashboard.
+
+Hence we have 3 feeds : 
+1. force_request : written to by the Dashboard, read by Image Processing. Used by Dashboard to force request for new frame from the camera, and it's status.
+2. force_served : written to by Image Processing, read by the Dashboard. Used by Image processing to indicate when the requested force update is ready to be accessed.
+3. control : Written to by the dashboard, read by the control system. Used by Dashboard to ask the control system to force turn on/off power for specific camera/room.

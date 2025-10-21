@@ -1,21 +1,27 @@
 import os
+import sys
 import time
 import random
 import shutil
 from typing import Dict, Iterable, List
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import torch
 from ultralytics import YOLO
 
 from feeds import append_message, consume_messages
 
-IMAGE_SRC_DIR = "images_src"
-IMAGE_READY_DIR = "images_ready"
+# Use absolute paths based on project root
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+IMAGE_SRC_DIR = os.path.join(PROJECT_ROOT, "images_src")
+IMAGE_READY_DIR = os.path.join(PROJECT_ROOT, "images_ready")
 FORCE_REQUEST_FEED = "force_request"
 FORCE_SERVED_FEED = "force_served"
 CAPTURE_INTERVAL = 60  # seconds
 BATCH_SIZE = 25
-YOLO_MODEL_NAME = 'yolo11s.pt'  # Change this to use a different YOLO model
+YOLO_MODEL_NAME = os.path.join(PROJECT_ROOT, 'yolo11s.pt')  # Change this to use a different YOLO model
 
 # --- YOLO Model Initialization ---
 def get_device():
@@ -29,7 +35,7 @@ def get_device():
 DEVICE = get_device()
 try:
     # Use the fine-tuned model if available, otherwise fall back to the base model
-    FINETUNED_MODEL_PATH = 'runs/train/yolo_finetune_results/weights/best.pt'
+    FINETUNED_MODEL_PATH = os.path.join(PROJECT_ROOT, 'runs/train/yolo_finetune_results/weights/best.pt')
     if os.path.exists(FINETUNED_MODEL_PATH):
         MODEL = YOLO(FINETUNED_MODEL_PATH)
         print(f"[YOLO] Loaded fine-tuned model from: {FINETUNED_MODEL_PATH}")

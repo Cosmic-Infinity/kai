@@ -1,5 +1,9 @@
 import os
+import sys
 from typing import Dict, Tuple
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PIL import Image as PILImage
 from kivy.app import App
@@ -13,7 +17,9 @@ from kivy.uix.label import Label
 
 from feeds import append_message, consume_messages
 
-IMAGE_DIR = "images_ready"
+# Use absolute paths based on project root
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+IMAGE_DIR = os.path.join(PROJECT_ROOT, "images_ready")
 FORCE_REQUEST_FEED = "force_request"
 FORCE_SERVED_FEED = "force_served"
 CONTROL_FEED = "control"

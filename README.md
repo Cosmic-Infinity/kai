@@ -1,6 +1,6 @@
 # KAI - Automated Energy Management System
 
-> *Intelligent energy-saving system using computer vision and IoT to automatically control appliances based on room occupancy. Designed to hook into existing camera feeds, be scalable, and low maintainnace.*
+> _Intelligent energy-saving system using computer vision and IoT to automatically control appliances based on room occupancy. Designed to hook into existing camera feeds, be scalable, and low maintenance._
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![MQTT](https://img.shields.io/badge/MQTT-Mosquitto-orange.svg)](https://mosquitto.org/)
@@ -11,11 +11,11 @@
 
 ## 🎯 Overview
 
-KAI is an IoT system designed for large organizations to save energy by automatically turning off appliances when rooms are unoccupied. Using camera feeds and YOLOv11 computer vision, the system detects human presence and intelligently manages power to connected devices. Refer to the system overview image or the system architecture to know more about how it works. 
+KAI is an IoT system designed for large organizations to save energy by automatically turning off appliances when rooms are unoccupied. Using camera feeds and YOLOv11 computer vision, the system detects human presence and intelligently manages power to connected devices. Refer to the system overview image or the system architecture to know more about how it works.
 
 ### Key Features
 
-✨ **Automated Power Management** - Turns off appliances after detecting 300s (configurable) of no human presence. 
+✨ **Automated Power Management** - Turns off appliances after detecting 300s (configurable) of no human presence.
 🎥 **Computer Vision** - YOLOv11-based person detection from camera feeds  
 📊 **Real-time Dashboard** - Kivy UI showing live camera status and manual controls.
 🔌 **MQTT Architecture** - Scalable, real-time messaging with Eclipse Mosquitto  
@@ -81,17 +81,20 @@ net start mosquitto  # Windows
 ### Run the System
 
 **One-Command Launch (Recommended):**
+
 ```bash
 python start.py
 ```
 
 This launches all modules in separate windows:
+
 - Image Server (processes camera feeds)
 - Control Server (manages power)
 - Dashboard UI (Kivy interface)
 - MQTT Monitor (traffic viewer)
 
 **Manual Launch:**
+
 ```bash
 # Terminal 1 - Image Server
 python modules/image_server.py
@@ -160,16 +163,19 @@ MQTT_QOS = 1                    # Quality of Service (0, 1, or 2)
 ```
 
 ### Image Server
+
 - **Capture Interval**: 60 seconds
 - **Batch Processing**: 25 images at a time
 - **Model**: YOLOv11 (auto-detects fine-tuned version)
 
 ### Control Server
+
 - **Control Response**: ~100ms (instant)
 - **Status Monitoring**: Every 30 seconds
 - **Auto Power-Off**: 10 consecutive "NO" detections
 
 ### Dashboard
+
 - **Refresh Interval**: 30 seconds
 - **Visual Indicators**: Green (person detected), Red (no person)
 - **Controls**: Force update, Power toggle per camera
@@ -179,6 +185,7 @@ MQTT_QOS = 1                    # Quality of Service (0, 1, or 2)
 ## 📊 How It Works
 
 ### 1. Image Processing
+
 - Reads images from `images_src/` every 60 seconds
 - Runs YOLOv11 person detection
 - Tags images as `CAM_name_YES.jpg` (person) or `CAM_name_NO.jpg` (empty)
@@ -186,6 +193,7 @@ MQTT_QOS = 1                    # Quality of Service (0, 1, or 2)
 - Handles force update requests instantly
 
 ### 2. Dashboard (UI)
+
 - Displays all camera feeds with status borders
 - **Green border**: Person detected
 - **Red border**: No person detected
@@ -193,12 +201,14 @@ MQTT_QOS = 1                    # Quality of Service (0, 1, or 2)
 - **Toggle Power**: Manual appliance control
 
 ### 3. Control System
+
 - **Fast Thread**: Checks UI commands every 100ms
 - **Slow Thread**: Monitors camera status every 30s
 - Auto power-off after 10 consecutive "NO" readings
 - Writes power commands to POWER feed
 
 ### 4. MQTT Communication
+
 - **kai/force_request**: Dashboard → Image Server
 - **kai/force_served**: Image Server → Dashboard
 - **kai/control**: Dashboard → Control Server
@@ -209,22 +219,26 @@ MQTT_QOS = 1                    # Quality of Service (0, 1, or 2)
 ## 🧪 Testing
 
 ### Test MQTT Connection
+
 ```bash
 python test_mqtt.py
 ```
 
 ### Monitor Real-Time Traffic
+
 ```bash
 python monitor_mqtt.py
 ```
 
 Shows color-coded messages:
+
 - 📤 **Force requests** (yellow)
 - ✓ **Force served** (green)
 - 🎮 **Control commands** (blue)
 - ⚡ **Power commands** (red)
 
 ### Test Individual Modules
+
 ```bash
 # Test image processing
 python modules/image_server.py
@@ -240,13 +254,13 @@ python modules/ui.py
 
 ## 🐛 Troubleshooting
 
-| Problem | Solution |
-|---------|----------|
-| **"Connection refused"** | Start Mosquitto: `net start mosquitto` |
-| **"Import paho.mqtt"** | Install: `pip install paho-mqtt` |
-| **Slow UI response** | Already fixed! Now ~100ms response time |
+| Problem                   | Solution                                  |
+| ------------------------- | ----------------------------------------- |
+| **"Connection refused"**  | Start Mosquitto: `net start mosquitto`    |
+| **"Import paho.mqtt"**    | Install: `pip install paho-mqtt`          |
+| **Slow UI response**      | Already fixed! Now ~100ms response time   |
 | **Images not processing** | Check `images_src/` has `CAM_*.jpg` files |
-| **Messages not received** | Verify topic names in `mqtt_config.py` |
+| **Messages not received** | Verify topic names in `mqtt_config.py`    |
 
 ---
 
@@ -267,4 +281,4 @@ See [LICENSE](LICENSE) file for details.
 
 ---
 
-**Parts of this description was generated by AI. Please keep an eye out for inconsistences.**
+**Parts of this description was generated by AI. Please keep an eye out for inconsistencies.**

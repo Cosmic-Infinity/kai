@@ -1,6 +1,6 @@
 # KAI - Automated Energy Management System
 
-> _Intelligent energy-saving system using computer vision and IoT to automatically control appliances based on room occupancy. Designed to hook into existing camera feeds, be scalable, and low maintenance._
+> _An automated infrastructure management system focused on reducing power usage. Hooks into pre-existing infrastructure to control appliances when not in use. Designed to be extremely flexible, low maintenance, and scalable as needed._
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![MQTT](https://img.shields.io/badge/MQTT-Mosquitto-orange.svg)](https://mosquitto.org/)

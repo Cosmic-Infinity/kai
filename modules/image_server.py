@@ -19,7 +19,7 @@ IMAGE_SRC_DIR = os.path.join(PROJECT_ROOT, "images_src")
 IMAGE_READY_DIR = os.path.join(PROJECT_ROOT, "images_ready")
 FORCE_REQUEST_FEED = "force_request"
 FORCE_SERVED_FEED = "force_served"
-CAPTURE_INTERVAL = 60  # seconds
+CAPTURE_INTERVAL = 30  # seconds
 BATCH_SIZE = 25
 YOLO_MODEL_NAME = os.path.join(PROJECT_ROOT, 'yolo11s.pt')  # Change this to use a different YOLO model
 

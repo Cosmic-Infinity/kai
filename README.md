@@ -9,21 +9,21 @@
 
 ---
 
-## 🎯 Overview
+## Overview
 
 KAI is an IoT system designed for large organizations to save energy by automatically turning off appliances when rooms are unoccupied. Using camera feeds and YOLOv11 computer vision, the system detects human presence and intelligently manages power to connected devices. Refer to the system overview image or the system architecture to know more about how it works.
 
 ### Key Features
 
-✨ **Automated Power Management** - Turns off appliances after detecting 300s (configurable) of no human presence.
-🎥 **Computer Vision** - YOLOv11-based person detection from camera feeds  
-📊 **Real-time Dashboard** - Kivy UI showing live camera status and manual controls.
-🔌 **MQTT Architecture** - Scalable, real-time messaging with Eclipse Mosquitto  
-🚀 **One-Command Launch** - Start entire system with `python start.py`
+**Automated Power Management** - Turns off appliances after detecting 300s (configurable) of no human presence.
+**Computer Vision** - YOLOv11-based person detection from camera feeds  
+**Near Real-time Dashboard** - Kivy UI showing live camera status and manual controls.
+**MQTT Architecture** - Scalable, real-time messaging with Eclipse Mosquitto  
+**One-Command Launch** - Start entire system with `python start.py`
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -51,7 +51,7 @@ KAI is an IoT system designed for large organizations to save energy by automati
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -118,7 +118,7 @@ python test_mqtt.py
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 kai/
@@ -144,7 +144,7 @@ kai/
 
 ---
 
-## 🔧 Configuration
+## Configuration
 
 ### MQTT Broker (`mqtt_config.py`)
 
@@ -182,7 +182,7 @@ MQTT_QOS = 1                    # Quality of Service (0, 1, or 2)
 
 ---
 
-## 📊 How It Works
+## How It Works
 
 ### 1. Image Processing
 
@@ -216,7 +216,7 @@ MQTT_QOS = 1                    # Quality of Service (0, 1, or 2)
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ### Test MQTT Connection
 
@@ -232,10 +232,10 @@ python monitor_mqtt.py
 
 Shows color-coded messages:
 
-- 📤 **Force requests** (yellow)
-- ✓ **Force served** (green)
-- 🎮 **Control commands** (blue)
-- ⚡ **Power commands** (red)
+- **Force requests** (yellow)
+- **Force served** (green)
+- **Control commands** (blue)
+- **Power commands** (red)
 
 ### Test Individual Modules
 
@@ -252,7 +252,7 @@ python modules/ui.py
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 | Problem                   | Solution                                  |
 | ------------------------- | ----------------------------------------- |
@@ -264,7 +264,7 @@ python modules/ui.py
 
 ---
 
-## 🛠️ Built With
+## Built With
 
 - **[Python](https://www.python.org/)** - Core language
 - **[YOLOv11](https://github.com/ultralytics/ultralytics)** - Computer vision
@@ -275,7 +275,7 @@ python modules/ui.py
 
 ---
 
-## 📄 License
+## License
 
 See [LICENSE](LICENSE) file for details.
 

@@ -33,7 +33,7 @@ def colored(text, color):
 def print_banner():
     """Print the startup banner."""
     print(colored("=" * 70, Colors.CYAN))
-    print(colored("🚀 KAI IoT System Launcher", Colors.HEADER + Colors.BOLD))
+    print(colored("[KAI] IoT System Launcher", Colors.HEADER + Colors.BOLD))
     print(colored("=" * 70, Colors.CYAN))
     print()
 
@@ -42,10 +42,10 @@ def check_python():
     """Verify Python is available."""
     try:
         version = sys.version.split()[0]
-        print(colored(f"✓ Python {version}", Colors.GREEN))
+        print(colored(f"[OK] Python {version}", Colors.GREEN))
         return True
     except Exception as e:
-        print(colored(f"✗ Python check failed: {e}", Colors.RED))
+        print(colored(f"[FAIL] Python check failed: {e}", Colors.RED))
         return False
 
 
@@ -68,19 +68,19 @@ def check_mqtt_broker():
         client.loop_stop()
         
         if connected[0]:
-            print(colored("✓ MQTT broker is running", Colors.GREEN))
+            print(colored("[OK] MQTT broker is running", Colors.GREEN))
             return True
         else:
-            print(colored("✗ MQTT broker connection failed", Colors.RED))
+            print(colored("[FAIL] MQTT broker connection failed", Colors.RED))
             print(colored("  Run: net start mosquitto", Colors.YELLOW))
             return False
             
     except ImportError:
-        print(colored("✗ paho-mqtt not installed", Colors.RED))
+        print(colored("[FAIL] paho-mqtt not installed", Colors.RED))
         print(colored("  Run: pip install paho-mqtt", Colors.YELLOW))
         return False
     except Exception as e:
-        print(colored(f"✗ MQTT broker not reachable: {e}", Colors.RED))
+        print(colored(f"[FAIL] MQTT broker not reachable: {e}", Colors.RED))
         print(colored("  Run: net start mosquitto", Colors.YELLOW))
         return False
 
@@ -96,9 +96,9 @@ def check_directories():
     all_exist = True
     for name, path in dirs.items():
         if path.exists():
-            print(colored(f"✓ {name}/ directory exists", Colors.GREEN))
+            print(colored(f"[OK] {name}/ directory exists", Colors.GREEN))
         else:
-            print(colored(f"✗ {name}/ directory missing", Colors.RED))
+            print(colored(f"[FAIL] {name}/ directory missing", Colors.RED))
             all_exist = False
             # Create if missing
             path.mkdir(exist_ok=True)
@@ -130,11 +130,11 @@ def launch_windows(modules):
                 cwd=os.getcwd()
             )
             processes.append(process)
-            print(colored(f"✓ Launched {name}", Colors.GREEN))
+            print(colored(f"[OK] Launched {name}", Colors.GREEN))
             time.sleep(0.5)  # Stagger launches
             
         except Exception as e:
-            print(colored(f"✗ Failed to launch {name}: {e}", Colors.RED))
+            print(colored(f"[FAIL] Failed to launch {name}: {e}", Colors.RED))
     
     return processes
 
@@ -161,7 +161,7 @@ def launch_unix(modules):
             continue
     
     if not terminal_cmd:
-        print(colored("✗ No suitable terminal emulator found", Colors.RED))
+        print(colored("[FAIL] No suitable terminal emulator found", Colors.RED))
         return processes
     
     for module in modules:
@@ -171,11 +171,11 @@ def launch_unix(modules):
             cmd = terminal_cmd + [f'python {script}; exec bash']
             process = subprocess.Popen(cmd, cwd=os.getcwd())
             processes.append(process)
-            print(colored(f"✓ Launched {name}", Colors.GREEN))
+            print(colored(f"[OK] Launched {name}", Colors.GREEN))
             time.sleep(0.5)
             
         except Exception as e:
-            print(colored(f"✗ Failed to launch {name}: {e}", Colors.RED))
+            print(colored(f"[FAIL] Failed to launch {name}: {e}", Colors.RED))
     
     return processes
 
@@ -196,7 +196,7 @@ def main():
     print()
     
     if not checks_passed:
-        print(colored("⚠ Some checks failed. Continue anyway? (y/N): ", Colors.YELLOW), end='')
+        print(colored("[WARN] Some checks failed. Continue anyway? (y/N): ", Colors.YELLOW), end='')
         response = input().strip().lower()
         if response != 'y':
             print(colored("Startup cancelled.", Colors.RED))
@@ -222,7 +222,7 @@ def main():
         },
         {
             'name': 'MQTT Monitor',
-            'script': 'monitor_mqtt.py',
+            'script': 'tools\\monitor_mqtt.py' if platform.system() == 'Windows' else 'tools/monitor_mqtt.py',
             'title': 'KAI - MQTT Monitor'
         },
         {
@@ -243,7 +243,7 @@ def main():
     
     print()
     print(colored("=" * 70, Colors.CYAN))
-    print(colored(f"✓ Launched {len(processes)} modules successfully!", Colors.GREEN + Colors.BOLD))
+    print(colored(f"[OK] Launched {len(processes)} modules successfully!", Colors.GREEN + Colors.BOLD))
     print(colored("=" * 70, Colors.CYAN))
     print()
     print(colored("System is starting up...", Colors.CYAN))

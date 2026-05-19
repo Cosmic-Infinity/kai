@@ -7,7 +7,11 @@ Useful for debugging and monitoring the system.
 
 import paho.mqtt.client as mqtt
 import sys
+import os
 from datetime import datetime
+
+# Add project root to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import mqtt_config as config
 
@@ -30,7 +34,7 @@ def on_connect(client, userdata, flags, reason_code, properties):
     """Callback when connected to broker."""
     if reason_code == 0:
         timestamp = datetime.now().strftime("%H:%M:%S")
-        print(colored(f"\n[{timestamp}] ✓ Connected to MQTT broker", Colors.GREEN))
+        print(colored(f"\n[{timestamp}] [OK] Connected to MQTT broker", Colors.GREEN))
         print(colored(f"Broker: {config.MQTT_BROKER_HOST}:{config.MQTT_BROKER_PORT}", Colors.CYAN))
         print(colored("\nSubscribing to topics:", Colors.YELLOW))
         

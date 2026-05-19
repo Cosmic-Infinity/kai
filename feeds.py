@@ -135,7 +135,6 @@ class MQTTFeedManager:
     def _connect_loop(self):
         """Connection loop with retry logic."""
         attempt = 0
-        loop_started = False
         
         while True:
             try:
@@ -151,16 +150,14 @@ class MQTTFeedManager:
                         print(f"[MQTT] Reconnection attempt {attempt}...")
                     
                     try:
+                        self._client.loop_stop()
                         self._client.connect(
                             config.MQTT_BROKER_HOST,
                             config.MQTT_BROKER_PORT,
                             config.MQTT_KEEPALIVE
                         )
                         
-                        # Only start loop once
-                        if not loop_started:
-                            self._client.loop_start()
-                            loop_started = True
+                        self._client.loop_start()
                     except ConnectionRefusedError:
                         print(f"[MQTT] Connection refused. Is the broker running? Retrying in {config.MQTT_RECONNECT_DELAY}s...")
                         time.sleep(config.MQTT_RECONNECT_DELAY)

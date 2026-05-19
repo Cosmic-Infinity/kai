@@ -14,7 +14,7 @@ BROKER_PORT = 1883
 def on_connect(client, userdata, flags, reason_code, properties):
     """Callback when connection attempt completes."""
     if reason_code == 0:
-        print("✓ Successfully connected to MQTT broker!")
+        print("[OK] Successfully connected to MQTT broker!")
         print(f"  Broker: {BROKER_HOST}:{BROKER_PORT}")
         print("\nTesting publish/subscribe...")
         

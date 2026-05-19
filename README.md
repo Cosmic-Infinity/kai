@@ -112,33 +112,36 @@ python monitor_mqtt.py
 ### Test MQTT Connection
 
 ```bash
-python test_mqtt.py
-# Should show: ✓ Successfully connected to MQTT broker!
+python tools/test_mqtt.py
+# Should show: [OK] Successfully connected to MQTT broker!
 ```
 
 ---
 
 ## Project Structure
 
-```
+```text
 kai/
-├── start.py                 # ⭐ One-command launcher
-├── test_mqtt.py             # Test MQTT connection
-├── monitor_mqtt.py          # Monitor MQTT traffic
+├── start.py                 # [SYS] One-command launcher
 ├── mqtt_config.py           # MQTT configuration
 ├── feeds.py                 # MQTT feed system
 ├── requirements.txt         # Dependencies
 ├── README.md                # This file
 ├── system.txt               # System specification
 │
+├── tools/                   # Maintenance scripts
+│   ├── test_mqtt.py         # Test MQTT connection
+│   ├── monitor_mqtt.py      # Monitor MQTT traffic
+│   └── finetune.py          # Script to finetune YOLO models
+│
 ├── modules/                 # Application modules
 │   ├── image_server.py      # Camera processing
 │   ├── control_server.py    # Power control
+│   ├── http_api.py          # Local Web Server
 │   └── ui.py                # Dashboard UI
 │
 ├── images_src/              # Source camera images
 ├── images_ready/            # Processed images (status tagged)
-├── feeds/                   # Legacy file-based feeds
 └── human-detection-in-classroom/  # Training dataset
 ```
 

@@ -78,7 +78,14 @@ def detect_person_in_batch(image_paths: Iterable[str]) -> Dict[str, tuple]:
                     fy = 1.0 - y2
                     fw = x2 - x1
                     fh = y2 - y1
-                    bboxes.append((fx, fy, fw, fh, f"Person {int(conf*100)}%", "#10B981"))
+                    
+                    # Gradient color from Red (F43F5E) to Green (10B981) based on confidence
+                    r = int(244 + (16 - 244) * conf)
+                    g = int(63 + (185 - 63) * conf)
+                    b = int(94 + (129 - 94) * conf)
+                    color = f"#{r:02X}{g:02X}{b:02X}"
+                    
+                    bboxes.append((fx, fy, fw, fh, f"Person {int(conf*100)}%", color))
                 results_map[image_paths[i]] = ("YES", bboxes)
 
     except Exception as e:
@@ -231,7 +238,7 @@ def capture_and_update_images():
         detection_results = detect_person_in_batch(batch_paths)
         end_time = time.time()
 
-        print(f"[Image Server] Batch processed in {end_time - start_time:.2f} seconds.")
+        print(f"[Image Server] Batch processed dynamically in {end_time - start_time:.2f} seconds.")
 
         # Create new files in 'ready', keep originals in 'src'
         for img_path, (status, bboxes) in detection_results.items():

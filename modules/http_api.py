@@ -75,6 +75,7 @@ class KAIRequestHandler(SimpleHTTPRequestHandler):
             post_data = self.rfile.read(content_length)
             try:
                 new_config = json.loads(post_data.decode('utf-8'))
+                logging.info(f"UI submitted new configuration via HTTP POST: {new_config}")
                 from config_manager import save_config
                 save_config(new_config)
                 self.send_response(200)

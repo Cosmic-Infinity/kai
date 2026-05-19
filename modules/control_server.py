@@ -64,7 +64,7 @@ def read_control_feed() -> None:
             print(f"[Control] Invalid state '{desired_state}' in '{command}'.")
             continue
         write_to_power_feed(f"{target}_{desired_state}")
-        print(f"[Control] ⚡ Instantly processed command: {command}")
+        print(f"[Control] [FAST] Instantly processed command: {command}")
 
 
 def write_to_power_feed(content: str) -> None:
@@ -90,10 +90,10 @@ def control_command_loop() -> None:
 
 def camera_monitoring_loop() -> None:
     """
-    Slow loop that monitors camera statuses every 30 seconds.
-    Automatically turns off power after 10 consecutive "NO" statuses.
+    Slow loop that monitors camera statuses.
+    Automatically turns off power after consecutive "NO" statuses, configured dynamically.
     """
-    print("[Monitoring Loop] Started - checking camera statuses every 30s...")
+    print(f"[Monitoring Loop] Started - checking camera statuses based on dynamic configuration...")
     camera_inactivity_count: Dict[str, int] = {}
 
     while True:
@@ -125,8 +125,8 @@ def main() -> None:
     print("=" * 60)
     print("Control Server started.")
     print("=" * 60)
-    print(f"⚡ Control commands: Instant response (checks every 0.1s)")
-    print(f"📊 Using dynamic config from config.json")
+    print(f"[FAST] Control commands: Instant response (checks every 0.1s)")
+    print(f"[CONF] Using dynamic config from config.json")
     print("=" * 60)
     
     # Create threads for parallel processing

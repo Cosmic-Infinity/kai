@@ -37,7 +37,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import json
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-IMAGE_DIR = os.path.join(PROJECT_ROOT, "images_ready")
 
 from PIL import Image as PILImage
 
@@ -125,7 +124,6 @@ class TooltipIconButton(MDIconButton, MDTooltip):
 
 # ─── Paths & constants ────────────────────────────────────────
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-IMAGE_DIR = os.path.join(PROJECT_ROOT, "images_ready")
 FORCE_REQUEST_FEED = "force_request"
 FORCE_SERVED_FEED = "force_served"
 CONTROL_FEED = "control"
@@ -155,38 +153,6 @@ COLOR_BADGE_UNKNOWN = _rgba("#334155")
 
 POWER_ON_COLOR = get_color_from_hex("#10B981")
 POWER_OFF_COLOR = get_color_from_hex("#F43F5E")
-
-
-# ─── Helpers (unchanged logic from original) ─────────────────
-
-def _parse_ready_filename(filename: str):
-    """Parse a ready-image filename like ``CAM_lobby_YES.jpg``."""
-    stem, ext = os.path.splitext(filename)
-    if ext.lower() not in {".jpg", ".jpeg", ".png"}:
-        return None
-    if "_" not in stem:
-        return None
-    camera_id, status = stem.rsplit("_", 1)
-    status = status.upper()
-    if not camera_id.startswith("CAM_"):
-        return None
-    if status not in {"YES", "NO"}:
-        return None
-    return camera_id, status
-
-
-def discover_cameras() -> Dict[str, Tuple[str, str]]:
-    """Scan ``images_ready/`` and return ``{cam_id: (path, status)}``."""
-    cameras: Dict[str, Tuple[str, str]] = {}
-    try:
-        for filename in os.listdir(IMAGE_DIR):
-            parsed = _parse_ready_filename(filename)
-            if parsed:
-                camera_id, status = parsed
-                cameras[camera_id] = (os.path.join(IMAGE_DIR, filename), status)
-    except FileNotFoundError:
-        os.makedirs(IMAGE_DIR, exist_ok=True)
-    return cameras
 
 
 _texture_executor = ThreadPoolExecutor(max_workers=4)
@@ -829,7 +795,6 @@ class WindowManager(MDScreenManager):
 
 class ControlDashboardApp(MDApp):
     def build(self):
-        os.makedirs(IMAGE_DIR, exist_ok=True)
         self.theme_cls.theme_style = "Dark"
         self.theme_cls.primary_palette = "Blue"
         self.theme_cls.accent_palette = "Teal"

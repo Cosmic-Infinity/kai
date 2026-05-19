@@ -4,8 +4,9 @@ torch>=2.0.0
 torchvision>=0.15.0
 Pillow>=9.0.0
 
-# UI Framework
+# UI Framework (KivyMD pulls in Kivy as a dependency)
 kivy>=2.1.0
+kivymd>=1.1.1
 
 # MQTT Client
 paho-mqtt>=1.6.1

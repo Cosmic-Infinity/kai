@@ -1,0 +1,603 @@
+#:import dp kivy.metrics.dp
+#:import sp kivy.metrics.sp
+#:import Window kivy.core.window.Window
+#:import Animation kivy.animation.Animation
+#:import get_color_from_hex kivy.utils.get_color_from_hex
+
+# ──────────────────────────────────────────────────────────────
+#  Theme tokens  (referenced throughout the KV)
+# ──────────────────────────────────────────────────────────────
+#  bg_primary:      #0F172A   (deep navy)
+#  bg_card:         #1E293B   (slate card)
+#  bg_card_hover:   #334155   (lighter slate)
+#  accent:          #3B82F6   (electric blue)
+#  accent_glow:     #60A5FA   (lighter blue)
+#  success:         #10B981   (emerald green)
+#  danger:          #F43F5E   (rose red)
+#  text_primary:    #F8FAFC   (near-white)
+#  text_secondary:  #94A3B8   (muted slate)
+
+#  border_subtle:   #334155   (card border)
+
+<WindowManager>:
+
+<LoginScreen>:
+    MDBoxLayout:
+        orientation: "vertical"
+        padding: "40dp"
+        spacing: "20dp"
+        md_bg_color: get_color_from_hex("#0F172A")
+        
+        MDLabel:
+            text: "KAI Dashboard Login"
+            font_style: "H4"
+            theme_text_color: "Custom"
+            text_color: get_color_from_hex("#F8FAFC")
+            halign: "center"
+            size_hint_y: None
+            height: self.texture_size[1]
+            
+        Widget:
+            size_hint_y: 0.1
+            
+        MDTextField:
+            id: host_input
+            hint_text: "Server IP Address (e.g., 192.168.1.5)"
+            text: "127.0.0.1"
+            color_mode: "custom"
+            line_color_focus: get_color_from_hex("#3B82F6")
+            
+        MDTextField:
+            id: user_input
+            hint_text: "MQTT Username"
+            color_mode: "custom"
+            line_color_focus: get_color_from_hex("#3B82F6")
+            
+        MDTextField:
+            id: pass_input
+            hint_text: "MQTT Password"
+            password: True
+            color_mode: "custom"
+            line_color_focus: get_color_from_hex("#3B82F6")
+            
+        Widget:
+            size_hint_y: 0.2
+            
+        MDRaisedButton:
+            text: "CONNECT"
+            pos_hint: {"center_x": 0.5}
+            md_bg_color: get_color_from_hex("#3B82F6")
+            on_release: root.do_login(host_input.text, user_input.text, pass_input.text)
+            
+        Widget:
+            size_hint_y: 0.3
+
+<DashboardScreen>:
+
+
+# ──────────────────────────────────────────────────────────────
+#  StatusDot — a small pulsing circle that shows detection status
+# ──────────────────────────────────────────────────────────────
+<StatusDot>:
+    size_hint: None, None
+    size: dp(12), dp(12)
+    canvas.before:
+        Color:
+            rgba: self.dot_color
+        Ellipse:
+            pos: self.pos
+            size: self.size
+
+
+# ──────────────────────────────────────────────────────────────
+#  CameraCard — individual camera feed card
+# ──────────────────────────────────────────────────────────────
+<CameraCard>:
+    orientation: "vertical"
+    size_hint_y: None
+    height: dp(380)
+    padding: dp(0)
+    spacing: dp(0)
+    md_bg_color: get_color_from_hex("#1E293B")
+    radius: [dp(16)]
+    elevation: 6
+    ripple_behavior: True
+
+    canvas.after:
+        # Status glow strip (inset so it doesn't bleed past card corners)
+        Color:
+            rgba: self.status_color
+        Rectangle:
+            pos: self.x + dp(16), self.y + dp(2)
+            size: self.width - dp(32), dp(3)
+
+    # ── Image area with clipping + badge overlay ──
+    RelativeLayout:
+        size_hint_y: 0.62
+
+        # Clipped image container
+        BoxLayout:
+            id: image_box
+            size_hint: 1, 1
+
+            canvas.before:
+                StencilPush
+                RoundedRectangle:
+                    pos: self.pos
+                    size: self.size
+                    radius: [dp(16), dp(16), 0, 0]
+                StencilUse
+
+            canvas.after:
+                StencilUnUse
+                RoundedRectangle:
+                    pos: self.pos
+                    size: self.size
+                    radius: [dp(16), dp(16), 0, 0]
+                StencilPop
+
+            ClickableImage:
+                id: cam_image
+                fit_mode: "cover"
+                size_hint: 1, 1
+                on_release: root.open_preview()
+
+        # Status badge (floats above, not clipped)
+        MDCard:
+            size_hint: None, None
+            size: dp(90), dp(28)
+            pos_hint: {"right": 0.97, "top": 0.95}
+            md_bg_color: root.status_badge_color
+            radius: [dp(14)]
+            elevation: 2
+            padding: dp(6), dp(2)
+
+            MDLabel:
+                id: status_badge_label
+                text: root.status_text
+                halign: "center"
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+                font_style: "Caption"
+                bold: True
+
+    # ── Info row ──
+    BoxLayout:
+        size_hint_y: None
+        height: dp(44)
+        padding: dp(14), dp(4), dp(14), dp(0)
+        spacing: dp(8)
+
+        StatusDot:
+            dot_color: root.status_color
+            pos_hint: {"center_y": 0.5}
+
+        MDLabel:
+            text: root.camera_id
+            theme_text_color: "Custom"
+            text_color: get_color_from_hex("#F8FAFC")
+            font_style: "Subtitle1"
+            bold: True
+            shorten: True
+            shorten_from: "right"
+
+        # Power status pill badge
+        MDCard:
+            size_hint: None, None
+            size: dp(72), dp(24)
+            pos_hint: {"center_y": 0.5}
+            md_bg_color: root.power_badge_color
+            radius: [dp(12)]
+            elevation: 1
+            padding: dp(4), dp(2)
+
+            MDLabel:
+                text: root.power_label
+                halign: "center"
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+                font_style: "Caption"
+                bold: True
+
+    # ── Action buttons ──
+    BoxLayout:
+        size_hint_y: None
+        height: dp(50)
+        padding: dp(10), dp(4), dp(10), dp(10)
+        spacing: dp(8)
+
+        TooltipRaisedButton:
+            id: force_btn
+            text: "Refresh"
+            icon: "refresh"
+            font_size: sp(12)
+            md_bg_color: get_color_from_hex("#3B82F6")
+            text_color: 1, 1, 1, 1
+            elevation: 3
+            tooltip_text: "Force update this camera feed"
+            on_release: root.on_force_update()
+
+        TooltipRaisedButton:
+            id: toggle_btn
+            text: "Power"
+            icon: "power"
+            font_size: sp(12)
+            md_bg_color: root.power_badge_color
+            text_color: 1, 1, 1, 1
+            elevation: 3
+            tooltip_text: "Toggle camera power on/off"
+            on_release: root.on_toggle_power()
+
+
+# ──────────────────────────────────────────────────────────────
+#  Dashboard — main layout
+# ──────────────────────────────────────────────────────────────
+<Dashboard>:
+    orientation: "vertical"
+    md_bg_color: get_color_from_hex("#0F172A")
+
+    # ── Top App Bar ──
+    MDTopAppBar:
+        id: top_bar
+        title: "KAI Dashboard"
+        anchor_title: "center"
+        md_bg_color: get_color_from_hex("#0F172A")
+        specific_text_color: get_color_from_hex("#F8FAFC")
+        elevation: 0
+        left_action_items: [["menu", lambda x: root.open_settings_menu(x), "Menu"]]
+        right_action_items: [["refresh", lambda x: root.manual_refresh(), "Refresh all camera images"], [root.grid_icon, lambda x: root.cycle_density(), "Change Grid Density"]]
+
+    # ── Control strip ──
+    MDCard:
+        size_hint_y: None
+        height: dp(60)
+        md_bg_color: get_color_from_hex("#1E293B")
+        radius: [dp(16)]
+        elevation: 4
+        padding: dp(14), dp(8)
+        spacing: dp(10)
+        orientation: "horizontal"
+        size_hint_x: 0.98
+        pos_hint: {"center_x": 0.5}
+
+        MDTextField:
+            id: search_field
+            hint_text: "Search..."
+            icon_left: "magnify"
+            mode: "round"
+            size_hint_x: 0.45
+            line_color_focus: get_color_from_hex("#3B82F6")
+            text_color_normal: get_color_from_hex("#94A3B8")
+            text_color_focus: get_color_from_hex("#F8FAFC")
+            hint_text_color_normal: get_color_from_hex("#64748B")
+            font_size: sp(14)
+            pos_hint: {"center_y": 0.5}
+            on_text: root.on_filter_changed()
+
+        MDRaisedButton:
+            id: filter_btn
+            text: "Filter: All"
+            icon: "filter-variant"
+            md_bg_color: get_color_from_hex("#334155")
+            text_color: get_color_from_hex("#F8FAFC")
+            elevation: 0
+            font_size: sp(14)
+            size_hint_x: 0.25
+            pos_hint: {"center_y": 0.5}
+            on_release: root.open_filter_menu()
+
+        MDLabel:
+            id: camera_count_label
+            text: "0 cameras"
+            halign: "center"
+            theme_text_color: "Custom"
+            text_color: get_color_from_hex("#64748B")
+            font_style: "Body2"
+            bold: True
+            size_hint_x: 0.15
+            pos_hint: {"center_y": 0.5}
+
+        MDCard:
+            size_hint: None, None
+            size: dp(75), dp(32)
+            pos_hint: {"center_y": 0.5}
+            md_bg_color: get_color_from_hex("#334155")
+            radius: [dp(16)]
+            elevation: 0
+            padding: dp(8), 0
+            spacing: dp(4)
+
+            MDIcon:
+                icon: "timer-outline"
+                theme_text_color: "Custom"
+                text_color: get_color_from_hex("#94A3B8")
+                pos_hint: {"center_y": 0.5}
+                font_size: sp(16)
+                tooltip_text: "Auto-refresh timer"
+
+            MDLabel:
+                id: timer_label
+                text: "30s"
+                halign: "right"
+                theme_text_color: "Custom"
+                text_color: get_color_from_hex("#F8FAFC")
+                font_style: "Subtitle2"
+                bold: True
+
+    # ── Camera grid (virtualized) ──
+    RecycleView:
+        id: scroll_area
+        viewclass: "CameraCard"
+        do_scroll_x: False
+        do_scroll_y: True
+        bar_color: get_color_from_hex("#3B82F6")
+        bar_inactive_color: get_color_from_hex("#334155")
+        bar_width: dp(4)
+
+        RecycleGridLayout:
+            id: camera_grid
+            cols: 3
+            spacing: dp(14)
+            padding: dp(14), dp(10), dp(14), dp(14)
+            default_size: None, dp(380)
+            default_size_hint: 1, None
+            size_hint_y: None
+            height: self.minimum_height
+
+
+# ──────────────────────────────────────────────────────────────
+#  FullscreenPreview — modal preview with button-based zoom
+# ──────────────────────────────────────────────────────────────
+<FullscreenPreview>:
+    size_hint: 1, 1
+    auto_dismiss: False
+    overlay_color: 0, 0, 0, 0.85
+
+    BoxLayout:
+        orientation: "vertical"
+        spacing: dp(8)
+        padding: dp(10)
+
+        # Header
+        MDCard:
+            size_hint_y: None
+            height: dp(52)
+            md_bg_color: get_color_from_hex("#1E293B")
+            radius: [dp(12)]
+            elevation: 4
+            padding: dp(12), dp(4)
+            orientation: "horizontal"
+
+            MDLabel:
+                text: root.camera_id
+                theme_text_color: "Custom"
+                text_color: get_color_from_hex("#F8FAFC")
+                font_style: "H6"
+                bold: True
+                size_hint_x: 1
+                pos_hint: {"center_y": 0.5}
+
+            # Status badges
+            BoxLayout:
+                size_hint_x: None
+                width: self.minimum_width
+                spacing: dp(16)
+                pos_hint: {"center_y": 0.5}
+
+                # Room Status
+                BoxLayout:
+                    size_hint_x: None
+                    width: self.minimum_width
+                    spacing: dp(6)
+                    pos_hint: {"center_y": 0.5}
+
+                    MDLabel:
+                        text: "Room -"
+                        theme_text_color: "Custom"
+                        text_color: get_color_from_hex("#94A3B8")
+                        font_style: "Body2"
+                        size_hint_x: None
+                        width: dp(48)
+                        pos_hint: {"center_y": 0.5}
+
+                    MDCard:
+                        size_hint: None, None
+                        size: dp(90), dp(24)
+                        pos_hint: {"center_y": 0.5}
+                        md_bg_color: root.status_badge_color
+                        radius: [dp(12)]
+                        elevation: 1
+                        padding: dp(6), dp(2)
+
+                        MDLabel:
+                            text: root.status_text
+                            halign: "center"
+                            theme_text_color: "Custom"
+                            text_color: 1, 1, 1, 1
+                            font_style: "Caption"
+                            bold: True
+
+                # Power Status
+                BoxLayout:
+                    size_hint_x: None
+                    width: self.minimum_width
+                    spacing: dp(6)
+                    pos_hint: {"center_y": 0.5}
+
+                    MDLabel:
+                        text: "Power -"
+                        theme_text_color: "Custom"
+                        text_color: get_color_from_hex("#94A3B8")
+                        font_style: "Body2"
+                        size_hint_x: None
+                        width: dp(52)
+                        pos_hint: {"center_y": 0.5}
+
+                    MDCard:
+                        size_hint: None, None
+                        size: dp(60), dp(24)
+                        pos_hint: {"center_y": 0.5}
+                        md_bg_color: root.power_badge_color
+                        radius: [dp(12)]
+                        elevation: 1
+                        padding: dp(4), dp(2)
+
+                        MDLabel:
+                            text: root.power_label
+                            halign: "center"
+                            theme_text_color: "Custom"
+                            text_color: 1, 1, 1, 1
+                            font_style: "Caption"
+                            bold: True
+
+            Widget:
+                size_hint_x: 1
+
+            TooltipIconButton:
+                icon: "close"
+                theme_icon_color: "Custom"
+                icon_color: get_color_from_hex("#F8FAFC")
+                md_bg_color: get_color_from_hex("#991B1B")
+                pos_hint: {"center_y": 0.5}
+                tooltip_text: "Close Preview"
+                on_release: root.close_preview()
+
+        # Preview area — scrollable, centered image
+        ScrollView:
+            id: preview_scroll
+            do_scroll_x: True
+            do_scroll_y: True
+            bar_color: get_color_from_hex("#3B82F6")
+            bar_inactive_color: get_color_from_hex("#334155")
+            bar_width: dp(5)
+            scroll_type: ["bars", "content"]
+
+            AnchorLayout:
+                size_hint: None, None
+                size: max(self.parent.width, preview_image.width), max(self.parent.height, preview_image.height)
+                anchor_x: "center"
+                anchor_y: "center"
+
+                Image:
+                    id: preview_image
+                    fit_mode: "contain"
+                    size_hint: None, None
+                    size: dp(200), dp(200)
+
+        # Bottom controls
+        MDCard:
+            size_hint_y: None
+            height: dp(56)
+            md_bg_color: get_color_from_hex("#1E293B")
+            radius: [dp(12)]
+            elevation: 4
+            padding: dp(10), dp(6)
+            orientation: "horizontal"
+            spacing: dp(6)
+
+            TooltipIconButton:
+                icon: "magnify-minus"
+                icon_size: "20sp"
+                size_hint: None, None
+                size: dp(40), dp(40)
+                theme_icon_color: "Custom"
+                icon_color: get_color_from_hex("#F8FAFC")
+                md_bg_color: get_color_from_hex("#334155")
+                pos_hint: {"center_y": 0.5}
+                tooltip_text: "Zoom out"
+                on_release: root.zoom_out()
+
+            TooltipIconButton:
+                icon: "magnify-plus"
+                icon_size: "20sp"
+                size_hint: None, None
+                size: dp(40), dp(40)
+                theme_icon_color: "Custom"
+                icon_color: get_color_from_hex("#F8FAFC")
+                md_bg_color: get_color_from_hex("#334155")
+                pos_hint: {"center_y": 0.5}
+                tooltip_text: "Zoom in"
+                on_release: root.zoom_in()
+
+            TooltipIconButton:
+                icon: "fit-to-screen"
+                icon_size: "20sp"
+                size_hint: None, None
+                size: dp(40), dp(40)
+                theme_icon_color: "Custom"
+                icon_color: get_color_from_hex("#F8FAFC")
+                md_bg_color: get_color_from_hex("#065F46")
+                pos_hint: {"center_y": 0.5}
+                tooltip_text: "Fit image to screen"
+                on_release: root.fit_image()
+
+            MDLabel:
+                id: zoom_label
+                text: root.zoom_text
+                halign: "center"
+                theme_text_color: "Custom"
+                text_color: get_color_from_hex("#94A3B8")
+                font_style: "Caption"
+                size_hint_x: None
+                pos_hint: {"center_y": 0.5}
+                width: dp(60)
+
+            Widget:
+                size_hint_x: 0.05
+
+            TooltipRaisedButton:
+                text: "Refresh"
+                icon: "refresh"
+                md_bg_color: get_color_from_hex("#3B82F6")
+                text_color: 1, 1, 1, 1
+                pos_hint: {"center_y": 0.5}
+                tooltip_text: "Force update this camera"
+                on_release: root.do_force_update()
+
+            TooltipRaisedButton:
+                id: preview_toggle_btn
+                text: root.power_btn_text
+                icon: "power"
+                md_bg_color: get_color_from_hex("#475569")
+                text_color: 1, 1, 1, 1
+                pos_hint: {"center_y": 0.5}
+                tooltip_text: "Toggle camera power"
+                on_release: root.do_toggle_power()
+                
+            TooltipIconButton:
+                icon: "monitor-eye" if root.show_bboxes else "monitor-off"
+                icon_size: "20sp"
+                size_hint: None, None
+                size: dp(40), dp(40)
+                theme_icon_color: "Custom"
+                icon_color: get_color_from_hex("#F8FAFC")
+                md_bg_color: get_color_from_hex("#8B5CF6") if root.show_bboxes else get_color_from_hex("#475569")
+                pos_hint: {"center_y": 0.5}
+                tooltip_text: "Toggle ML detection boxes"
+                on_release: root.toggle_bboxes()
+
+<ConfigDialogContent@MDBoxLayout>:
+    orientation: "vertical"
+    spacing: "12dp"
+    size_hint_y: None
+    height: "280dp"
+
+    MDTextField:
+        id: image_interval
+        hint_text: "Image Capture Interval (s)"
+        input_filter: "int"
+    
+    MDTextField:
+        id: dash_interval
+        hint_text: "Dashboard Refresh Interval (s)"
+        input_filter: "int"
+        
+    MDTextField:
+        id: control_interval
+        hint_text: "Control Server Poll Interval (s)"
+        input_filter: "int"
+        
+    MDTextField:
+        id: threshold
+        hint_text: "Inactivity Threshold (count)"
+        input_filter: "int"

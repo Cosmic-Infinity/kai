@@ -14,9 +14,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IMAGE_DIR = os.path.join(PROJECT_ROOT, "images_ready")
 CONTROL_FEED = "control"
 POWER_FEED = "POWER"
-REFRESH_INTERVAL = 30  # seconds - for camera status monitoring
-CONTROL_CHECK_INTERVAL = 0.1  # seconds - fast polling for control commands
-INACTIVITY_THRESHOLD = 10  # 10 consecutive "NO" statuses
+from config_manager import load_config
 
 
 def _parse_status_filename(filename: str):
@@ -84,7 +82,7 @@ def control_command_loop() -> None:
     while True:
         try:
             read_control_feed()
-            time.sleep(CONTROL_CHECK_INTERVAL)  # Check every 100ms for instant response
+            time.sleep(0.1)  # Check every 100ms for instant response
         except Exception as e:
             print(f"[Control Loop] Error: {e}")
             time.sleep(1)
@@ -100,6 +98,10 @@ def camera_monitoring_loop() -> None:
 
     while True:
         try:
+            config = load_config()
+            interval = config.get("CONTROL_SERVER_INTERVAL", 30)
+            threshold = config.get("INACTIVITY_THRESHOLD", 10)
+            
             statuses = get_camera_status()
             for cam_id, status in statuses.items():
                 if status == "NO":
@@ -107,12 +109,12 @@ def camera_monitoring_loop() -> None:
                 else:
                     camera_inactivity_count[cam_id] = 0
 
-                if camera_inactivity_count.get(cam_id, 0) >= INACTIVITY_THRESHOLD:
+                if camera_inactivity_count.get(cam_id, 0) >= threshold:
                     write_to_power_feed(f"{cam_id}_OFF")
-                    print(f"[Inactivity] Turned off {cam_id} due to {INACTIVITY_THRESHOLD} consecutive 'NO' statuses.")
+                    print(f"[Inactivity] Turned off {cam_id} due to {threshold} consecutive 'NO' statuses.")
                     camera_inactivity_count[cam_id] = 0
             
-            time.sleep(REFRESH_INTERVAL)
+            time.sleep(interval)
         except Exception as e:
             print(f"[Monitoring Loop] Error: {e}")
             time.sleep(5)
@@ -123,9 +125,8 @@ def main() -> None:
     print("=" * 60)
     print("Control Server started.")
     print("=" * 60)
-    print(f"⚡ Control commands: Instant response (checks every {CONTROL_CHECK_INTERVAL}s)")
-    print(f"📊 Camera monitoring: Every {REFRESH_INTERVAL}s")
-    print(f"⏰ Auto power-off after: {INACTIVITY_THRESHOLD} consecutive 'NO' statuses")
+    print(f"⚡ Control commands: Instant response (checks every 0.1s)")
+    print(f"📊 Using dynamic config from config.json")
     print("=" * 60)
     
     # Create threads for parallel processing

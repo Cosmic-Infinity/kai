@@ -9,6 +9,7 @@ from typing import Dict, Iterable, List
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import torch
+import json
 from ultralytics import YOLO
 
 from feeds import append_message, consume_messages
@@ -19,9 +20,9 @@ IMAGE_SRC_DIR = os.path.join(PROJECT_ROOT, "images_src")
 IMAGE_READY_DIR = os.path.join(PROJECT_ROOT, "images_ready")
 FORCE_REQUEST_FEED = "force_request"
 FORCE_SERVED_FEED = "force_served"
-CAPTURE_INTERVAL = 30  # seconds
 BATCH_SIZE = 25
 YOLO_MODEL_NAME = os.path.join(PROJECT_ROOT, 'yolo11s.pt')  # Change this to use a different YOLO model
+from config_manager import load_config
 
 # --- YOLO Model Initialization ---
 def get_device():
@@ -50,24 +51,35 @@ except Exception as e:
 # --- End YOLO Initialization ---
 
 
-def detect_person_in_batch(image_paths: Iterable[str]) -> Dict[str, str]:
+def detect_person_in_batch(image_paths: Iterable[str]) -> Dict[str, tuple]:
     """
     Runs person detection on a batch of images using YOLOv8.
-    Returns a dictionary mapping image path to 'YES' or 'NO'.
+    Returns a dictionary mapping image path to ('YES' or 'NO', bboxes_list).
     """
     if not MODEL:
         print("[YOLO] Model not loaded, returning random status.")
-        return {path: ("YES" if random.random() > 0.5 else "NO") for path in image_paths}
+        return {path: (("YES" if random.random() > 0.5 else "NO"), []) for path in image_paths}
 
     image_paths = list(image_paths)
-    results_map: Dict[str, str] = {path: "NO" for path in image_paths}
+    results_map: Dict[str, tuple] = {path: ("NO", []) for path in image_paths}
     try:
         # Process images in batches
         predictions = MODEL.predict(source=image_paths, device=DEVICE, classes=[0], verbose=False) # Class 0 is 'person'
         
         for i, result in enumerate(predictions):
+            bboxes = []
             if len(result.boxes) > 0:  # A person was detected
-                results_map[image_paths[i]] = "YES"
+                for box in result.boxes:
+                    coords = box.xyxyn[0].tolist()
+                    conf = float(box.conf[0])
+                    x1, y1, x2, y2 = coords
+                    # Map to UI format (fx, fy, fw, fh) with Kivy bottom-left origin
+                    fx = x1
+                    fy = 1.0 - y2
+                    fw = x2 - x1
+                    fh = y2 - y1
+                    bboxes.append((fx, fy, fw, fh, f"Person {int(conf*100)}%", "#10B981"))
+                results_map[image_paths[i]] = ("YES", bboxes)
 
     except Exception as e:
         print(f"[YOLO] Error during batch prediction: {e}")
@@ -113,26 +125,59 @@ def _remove_existing_ready_file(camera_id: str) -> None:
     if not os.path.exists(IMAGE_READY_DIR):
         return
     for entry in os.listdir(IMAGE_READY_DIR):
-        parsed = _parse_ready_filename(entry)
-        if parsed and parsed[0] == camera_id:
-            try:
-                os.remove(os.path.join(IMAGE_READY_DIR, entry))
-            except OSError as exc:
-                print(f"[Image Server] Unable to remove old file '{entry}': {exc}")
+        if entry.endswith("_bboxes.json"):
+            cid = entry.replace("_bboxes.json", "")
+            if cid == camera_id:
+                try:
+                    os.remove(os.path.join(IMAGE_READY_DIR, entry))
+                except OSError:
+                    pass
+        else:
+            parsed = _parse_ready_filename(entry)
+            if parsed and parsed[0] == camera_id:
+                try:
+                    os.remove(os.path.join(IMAGE_READY_DIR, entry))
+                except OSError as exc:
+                    print(f"[Image Server] Unable to remove old file '{entry}': {exc}")
 
 
-def _write_ready_image(source_path: str, camera_id: str, status: str) -> None:
+def _cleanup_stale_ready_files(valid_camera_ids: set) -> None:
+    if not os.path.exists(IMAGE_READY_DIR):
+        return
+    for entry in os.listdir(IMAGE_READY_DIR):
+        if entry.endswith("_bboxes.json"):
+            cid = entry.replace("_bboxes.json", "")
+            if cid not in valid_camera_ids:
+                try:
+                    os.remove(os.path.join(IMAGE_READY_DIR, entry))
+                except OSError:
+                    pass
+        else:
+            parsed = _parse_ready_filename(entry)
+            if parsed:
+                cid, _ = parsed
+                if cid not in valid_camera_ids:
+                    try:
+                        os.remove(os.path.join(IMAGE_READY_DIR, entry))
+                    except OSError as exc:
+                        print(f"[Image Server] Unable to remove stale file '{entry}': {exc}")
+
+
+def _write_ready_image(source_path: str, camera_id: str, status: str, bboxes: list) -> None:
     _, ext = os.path.splitext(source_path)
     ext = ext.lower() or ".jpg"
     if ext not in {".jpg", ".jpeg", ".png"}:
         ext = ".jpg"
     destination_name = f"{camera_id}_{status}.jpg"
     destination_path = os.path.join(IMAGE_READY_DIR, destination_name)
+    bbox_path = os.path.join(IMAGE_READY_DIR, f"{camera_id}_bboxes.json")
 
     _remove_existing_ready_file(camera_id)
 
     try:
         shutil.copy2(source_path, destination_path)  # Changed from shutil.move to shutil.copy2
+        with open(bbox_path, 'w') as f:
+            json.dump(bboxes, f)
     except Exception as exc:
         print(f"[Image Server] Failed to copy '{source_path}' to ready dir: {exc}")
 
@@ -169,6 +214,11 @@ def capture_and_update_images():
     os.makedirs(IMAGE_READY_DIR, exist_ok=True)
 
     all_image_files = _list_source_images()
+    
+    # Cleanup stale files
+    valid_cids = {_camera_id_from_path(p) for p in all_image_files}
+    _cleanup_stale_ready_files(valid_cids)
+
     if not all_image_files:
         return
 
@@ -184,12 +234,12 @@ def capture_and_update_images():
         print(f"[Image Server] Batch processed in {end_time - start_time:.2f} seconds.")
 
         # Create new files in 'ready', keep originals in 'src'
-        for img_path, status in detection_results.items():
+        for img_path, (status, bboxes) in detection_results.items():
             camera_id = _camera_id_from_path(img_path)
             status_token = status.upper()
             if status_token not in {"YES", "NO"}:
                 status_token = "NO"
-            _write_ready_image(img_path, camera_id, status_token)
+            _write_ready_image(img_path, camera_id, status_token, bboxes)
             print(f"[Image Server] Updated camera '{camera_id}' with status {status_token}.")
 
 
@@ -251,9 +301,12 @@ def main():
         # Process force requests immediately
         process_force_requests()
 
-        # Regular capture every CAPTURE_INTERVAL seconds
+        # Regular capture based on config
         current_time = time.time()
-        if current_time - last_capture_time >= CAPTURE_INTERVAL:
+        config = load_config()
+        capture_interval = config.get("IMAGE_SERVER_INTERVAL", 60)
+        
+        if current_time - last_capture_time >= capture_interval:
             capture_and_update_images()
             last_capture_time = current_time
 

@@ -52,7 +52,6 @@ class MQTTFeedManager:
         self._lock = threading.RLock()
         self._connect_thread = None
         
-        # Topic mapping from feed names to MQTT topics
         self._topic_map = {
             "force_request": config.TOPIC_FORCE_REQUEST,
             "force_served": config.TOPIC_FORCE_SERVED,
@@ -60,7 +59,21 @@ class MQTTFeedManager:
             "POWER": config.TOPIC_POWER,
         }
         
+        self.host = config.MQTT_BROKER_HOST
+        self.port = config.MQTT_BROKER_PORT
+        
         self._initialize_client()
+        
+    def configure(self, host: str, port: int, username: str = None, password: str = None):
+        self.host = host
+        self.port = port
+        config.MQTT_BROKER_HOST = host
+        config.MQTT_BROKER_PORT = port
+        if username:
+            config.MQTT_USERNAME = username
+            config.MQTT_PASSWORD = password
+            if self._client:
+                self._client.username_pw_set(username, password)
     
     def _initialize_client(self):
         """Initialize the MQTT client with configuration."""
@@ -102,6 +115,15 @@ class MQTTFeedManager:
         # Start connection in background
         self._start_connection()
     
+    def start(self):
+        """Force a reconnect using the current configuration."""
+        self._connected = False
+        if self._client:
+            try:
+                self._client.disconnect()
+            except Exception as e:
+                print(f"[MQTT] Disconnect error: {e}")
+
     def _start_connection(self):
         """Start MQTT connection in a background thread."""
         if self._connect_thread and self._connect_thread.is_alive():
@@ -307,7 +329,7 @@ class MQTTFeedManager:
 
 # Global manager instance
 _manager = MQTTFeedManager()
-
+feed_manager = _manager
 
 # Public API - maintains compatibility with file-based system
 def append_message(feed_name: str, message: str) -> None:

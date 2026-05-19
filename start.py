@@ -225,6 +225,11 @@ def main():
             'script': 'monitor_mqtt.py',
             'title': 'KAI - MQTT Monitor'
         },
+        {
+            'name': 'HTTP API Server',
+            'script': 'modules\\http_api.py' if platform.system() == 'Windows' else 'modules/http_api.py',
+            'title': 'KAI - HTTP API'
+        },
     ]
     
     # Launch modules

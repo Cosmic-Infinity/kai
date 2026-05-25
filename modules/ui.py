@@ -286,8 +286,10 @@ class CameraCard(MDCard):
 
     def on_touch_down(self, touch):
         if self.collide_point(*touch.pos):
-            if super().on_touch_down(touch):
-                return True
+            # Manually dispatch touch events to children to prevent MDCard from swallowing the touch
+            for child in self.children[:]:
+                if child.dispatch('on_touch_down', touch):
+                    return True
         return False
 
     def on_current_status(self, instance, value):
@@ -326,6 +328,7 @@ class CameraCard(MDCard):
                 cam_info = dashboard.cameras_data.get(self.camera_id)
                 if cam_info and len(cam_info) > 2:
                     bboxes = cam_info[2]
+            print(f"[UI] Opening preview for camera: {self.camera_id} with {len(bboxes)} bounding boxes.")
             dashboard.open_preview(self.camera_id, self.current_image_path, self.current_status, self.power_state, bboxes)
 
     def on_force_update(self):
@@ -392,16 +395,19 @@ class FullscreenPreview(ModalView):
         img = self.ids.preview_image
         img.canvas.after.clear()
         
+        print(f"[UI] _update_bboxes_overlay — show_bboxes: {self.show_bboxes}, bboxes count: {len(self.bboxes)}")
+        
         if not self.show_bboxes or not img.texture:
             return
             
         from kivy.graphics import Color, Line, Rectangle
         from kivy.core.text import Label as CoreLabel
         
-        # Calculate the actual image pos/size within the widget using Kivy's native bounds
-        draw_w, draw_h = img.norm_image_size
-        draw_x = img.center_x - draw_w / 2
-        draw_y = img.center_y - draw_h / 2
+        # Calculate coordinate boundaries directly using the actual zoomed layout size of the image widget
+        draw_w = img.width
+        draw_h = img.height
+        draw_x = img.x
+        draw_y = img.y
 
         bboxes = self.bboxes
 
@@ -654,7 +660,8 @@ class Dashboard(MDBoxLayout):
 
     def open_filter_menu(self):
         if hasattr(self, 'filter_menu') and self.filter_menu:
-            self.filter_menu.dismiss()
+            menu = self.filter_menu
+            Clock.schedule_once(lambda dt: menu.dismiss(), 0)
             self.filter_menu = None
             return
 
@@ -688,14 +695,15 @@ class Dashboard(MDBoxLayout):
             self.filter_menu = MDDropdownMenu(
                 caller=self.ids.filter_btn,
                 items=menu_items,
-                width_mult=7,
+                width_mult=7 if Window.width > dp(500) else 5,
             )
             self.filter_menu.bind(on_dismiss=lambda *a: setattr(self, 'filter_menu', None))
-        self.filter_menu.open()
+        Clock.schedule_once(lambda dt: self.filter_menu.open(), 0)
 
     def open_settings_menu(self, caller_button):
         if hasattr(self, 'settings_menu') and self.settings_menu:
-            self.settings_menu.dismiss()
+            menu = self.settings_menu
+            Clock.schedule_once(lambda dt: menu.dismiss(), 0)
             self.settings_menu = None
             return
 
@@ -725,26 +733,30 @@ class Dashboard(MDBoxLayout):
         self.settings_menu = MDDropdownMenu(
             caller=caller_button,
             items=menu_items,
-            width_mult=6.5,
+            width_mult=6.5 if Window.width > dp(500) else 4.5,
         )
         self.settings_menu.bind(on_dismiss=lambda *a: setattr(self, 'settings_menu', None))
-        self.settings_menu.open()
+        Clock.schedule_once(lambda dt: self.settings_menu.open(), 0)
 
     def toggle_theme_style(self, *_):
-        self.settings_menu.dismiss()
+        if self.settings_menu:
+            menu = self.settings_menu
+            Clock.schedule_once(lambda dt: menu.dismiss(), 0)
         app = MDApp.get_running_app()
         app.toggle_theme()
 
     def logout(self, *_):
-        if hasattr(self, 'settings_menu'):
-            self.settings_menu.dismiss()
+        if hasattr(self, 'settings_menu') and self.settings_menu:
+            menu = self.settings_menu
+            Clock.schedule_once(lambda dt: menu.dismiss(), 0)
         save_client_config({"host": "", "username": "", "password": ""})
         app = MDApp.get_running_app()
         app.root.current = "login"
 
     def open_settings_dialog(self, *_):
-        if hasattr(self, 'settings_menu'):
-            self.settings_menu.dismiss()
+        if hasattr(self, 'settings_menu') and self.settings_menu:
+            menu = self.settings_menu
+            Clock.schedule_once(lambda dt: menu.dismiss(), 0)
         if not hasattr(self, 'settings_dialog'):
             from kivy.factory import Factory
             self.dialog_content = Factory.ConfigDialogContent()
@@ -812,7 +824,9 @@ class Dashboard(MDBoxLayout):
     def set_filter(self, status_filter):
         self.current_filter = status_filter
         self.ids.filter_btn.text = f"Filter: {status_filter}"
-        self.filter_menu.dismiss()
+        if self.filter_menu:
+            menu = self.filter_menu
+            Clock.schedule_once(lambda dt: menu.dismiss(), 0)
         self.on_filter_changed()
 
     def _apply_density(self, value):

@@ -117,10 +117,12 @@ class MQTTFeedManager:
         
         # Set reconnect delay
         self._client.reconnect_delay_set(min_delay=1, max_delay=30)
-        
-        # Start connection in background
-        self._start_connection()
     
+    def _ensure_connection_started(self):
+        """Ensure that the background connection thread has been started."""
+        if not self._connect_thread:
+            self._start_connection()
+
     def start(self):
         """Force a reconnect using the current configuration."""
         self._connected = False
@@ -129,6 +131,7 @@ class MQTTFeedManager:
                 self._client.disconnect()
             except Exception as e:
                 print(f"[MQTT] Disconnect error: {e}")
+        self._start_connection()
 
     def _start_connection(self):
         """Start MQTT connection in a background thread."""
@@ -269,6 +272,7 @@ class MQTTFeedManager:
         Returns:
             True if message was published successfully, False otherwise
         """
+        self._ensure_connection_started()
         if not self._connected:
             print(f"[MQTT] Not connected. Cannot publish to {feed_name}")
             return False
@@ -303,6 +307,7 @@ class MQTTFeedManager:
         Returns:
             List of messages (strings)
         """
+        self._ensure_connection_started()
         topic = self._get_topic(feed_name)
         with self._lock:
             messages = list(self._message_queues[topic])
@@ -319,6 +324,7 @@ class MQTTFeedManager:
         Returns:
             List of messages (strings)
         """
+        self._ensure_connection_started()
         topic = self._get_topic(feed_name)
         with self._lock:
             return list(self._message_queues[topic])
@@ -330,12 +336,14 @@ class MQTTFeedManager:
         Args:
             feed_name: Name of the feed
         """
+        self._ensure_connection_started()
         topic = self._get_topic(feed_name)
         with self._lock:
             self._message_queues[topic].clear()
     
     def is_connected(self) -> bool:
         """Check if connected to MQTT broker."""
+        self._ensure_connection_started()
         return self._connected
     
     def disconnect(self):

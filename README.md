@@ -73,9 +73,9 @@ choco install mosquitto  # Windows with Chocolatey
 # 3. Install Python dependencies
 pip install -r requirements.txt
 
-# 4. Start Mosquitto service
-net start mosquitto  # Windows
-# sudo systemctl start mosquitto  # Linux
+# 4. Secure Mosquitto & Start Service
+# Run the interactive setup tool in an Administrator PowerShell (Windows):
+python tools/setup_mqtt_auth.py
 ```
 
 ### Run the System
@@ -138,6 +138,7 @@ kai/
 │   ├── control_server.py    # Automatic appliance power control
 │   └── http_api.py          # Frame transmission web server
 ├── tools/                   # Debugging and utility scripts
+│   ├── setup_mqtt_auth.py   # Interactive Mosquitto security setup
 │   ├── test_mqtt.py         # Test broker connection
 │   ├── monitor_mqtt.py      # Print real-time MQTT message feeds
 │   └── finetune.py          # Fine-tuning utilities
@@ -159,7 +160,7 @@ kai/
 
 ```python
 # Broker settings
-MQTT_BROKER_HOST = "[IP_ADDRESS]"  # Change for remote broker
+MQTT_BROKER_HOST = "127.0.0.1"  # IP of your broker (use 127.0.0.1 for local)
 MQTT_BROKER_PORT = 1883         # Default MQTT port
 
 # Authentication (as required)
@@ -230,13 +231,13 @@ MQTT_QOS = 1                    # Quality of Service (0, 1, or 2)
 ### Test MQTT Connection
 
 ```bash
-python test_mqtt.py
+python tools/test_mqtt.py
 ```
 
 ### Monitor Real-Time Traffic
 
 ```bash
-python monitor_mqtt.py
+python tools/monitor_mqtt.py
 ```
 
 Shows color-coded messages:

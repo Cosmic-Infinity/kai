@@ -6,13 +6,13 @@ Modify these settings according to your MQTT broker setup.
 """
 
 # MQTT Broker Settings
-MQTT_BROKER_HOST = "localhost"  # Change to your broker's IP/hostname
+MQTT_BROKER_HOST = "127.0.0.1"  # Change to your broker's IP/hostname
 MQTT_BROKER_PORT = 1883  # Default MQTT port (use 8883 for TLS)
 MQTT_KEEPALIVE = 120  # Keepalive interval in seconds (increased for stability)
 
 # Authentication (set to None if broker doesn't require authentication)
-MQTT_USERNAME = None  # e.g., "your_username"
-MQTT_PASSWORD = None  # e.g., "your_password"
+MQTT_USERNAME = "kai_admin"  # e.g., "your_username"
+MQTT_PASSWORD = "kai"  # e.g., "your_password"
 
 # TLS/SSL Settings (optional, for secure connections)
 MQTT_USE_TLS = False

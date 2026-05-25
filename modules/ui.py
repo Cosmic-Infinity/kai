@@ -392,6 +392,12 @@ class FullscreenPreview(ModalView):
         self.bind(on_open=lambda *_: Clock.schedule_once(self.fit_image, 0.05))
 
     def toggle_bboxes(self):
+        # Debounce: mobile touchscreens fire on_release twice per tap
+        now = time.time()
+        if hasattr(self, '_last_toggle') and now - self._last_toggle < 0.3:
+            print(f"[UI] toggle_bboxes debounced (double-fire)")
+            return
+        self._last_toggle = now
         self.show_bboxes = not self.show_bboxes
         print(f"[UI] toggle_bboxes -> show_bboxes={self.show_bboxes}, bboxes={len(self.bboxes)}")
         try:
@@ -900,6 +906,8 @@ class Dashboard(MDBoxLayout):
     # ─── refresh cycle ────────────────────────────────────────
 
     def update_timer(self, dt):
+        if not hasattr(self, 'api_host') or not self.api_host:
+            return
         self.elapsed += 1
         remaining = max(0, self.refresh_interval - self.elapsed)
         self.ids.timer_label.text = f"{remaining}s"
@@ -914,6 +922,8 @@ class Dashboard(MDBoxLayout):
     # ─── MQTT: force update ───────────────────────────────────
 
     def _poll_force_served(self, dt):
+        if not hasattr(self, 'api_host') or not self.api_host:
+            return  # Not logged in yet — don't trigger MQTT
         messages = consume_messages(FORCE_SERVED_FEED)
         updated_cams = set()
         for msg in messages:

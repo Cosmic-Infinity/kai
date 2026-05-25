@@ -54,15 +54,30 @@ def check_mqtt_broker():
     try:
         import paho.mqtt.client as mqtt
         
+        # Load credentials if configured
+        import mqtt_config as config
+        
         connected = [False]
         
-        def on_connect(client, userdata, flags, rc):
+        def on_connect(client, userdata, flags, *args, **kwargs):
+            rc = args[0] if args else kwargs.get('reason_code', kwargs.get('rc', 0))
             connected[0] = (rc == 0)
             client.disconnect()
         
-        client = mqtt.Client(client_id="kai_launcher_test")
+        try:
+            client = mqtt.Client(
+                client_id="kai_launcher_test",
+                callback_api_version=mqtt.CallbackAPIVersion.VERSION2
+            )
+        except (AttributeError, TypeError):
+            client = mqtt.Client(client_id="kai_launcher_test")
+            
         client.on_connect = on_connect
-        client.connect("localhost", 1883, 60)
+        
+        if config.MQTT_USERNAME and config.MQTT_PASSWORD:
+            client.username_pw_set(config.MQTT_USERNAME, config.MQTT_PASSWORD)
+            
+        client.connect(config.MQTT_BROKER_HOST, config.MQTT_BROKER_PORT, 60)
         client.loop_start()
         time.sleep(1)
         client.loop_stop()
@@ -71,8 +86,8 @@ def check_mqtt_broker():
             print(colored("[OK] MQTT broker is running", Colors.GREEN))
             return True
         else:
-            print(colored("[FAIL] MQTT broker connection failed", Colors.RED))
-            print(colored("  Run: net start mosquitto", Colors.YELLOW))
+            print(colored("[FAIL] MQTT broker connection failed (could not authenticate or connect)", Colors.RED))
+            print(colored("  Verify your credentials in mqtt_config.py are correct.", Colors.YELLOW))
             return False
             
     except ImportError:

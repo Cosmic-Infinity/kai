@@ -66,13 +66,19 @@ from kivymd.uix.card import MDCard
 from kivy.network.urlrequest import UrlRequest
 import requests
 
-CLIENT_CONFIG_PATH = os.path.join(PROJECT_ROOT, "client_config.json")
+def get_client_config_path():
+    from kivy.app import App
+    app = App.get_running_app()
+    if app:
+        return os.path.join(app.user_data_dir, "client_config.json")
+    return os.path.join(PROJECT_ROOT, "client_config.json")
 
 def load_client_config():
     default_config = {"host": "127.0.0.1", "username": "", "password": "", "theme": "Dark"}
-    if os.path.exists(CLIENT_CONFIG_PATH):
+    path = get_client_config_path()
+    if os.path.exists(path):
         try:
-            with open(CLIENT_CONFIG_PATH, 'r') as f:
+            with open(path, 'r') as f:
                 loaded = json.load(f)
                 for k, v in default_config.items():
                     if k not in loaded:
@@ -83,8 +89,13 @@ def load_client_config():
     return default_config
 
 def save_client_config(config):
-    with open(CLIENT_CONFIG_PATH, 'w') as f:
-        json.dump(config, f, indent=4)
+    try:
+        path = get_client_config_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            json.dump(config, f, indent=4)
+    except Exception as e:
+        print(f"[ClientConfig] Failed to save config: {e}")
 
 class LoginScreen(MDScreen):
     def do_login(self, host, username, password):
@@ -147,9 +158,10 @@ class TooltipRoundFlatIconButton(MDRoundFlatIconButton, MDTooltip):
     pass
 
 
-class MenuIconItem(ButtonBehavior, MDBoxLayout):
+from kivymd.uix.list import OneLineIconListItem
+
+class MenuIconItem(OneLineIconListItem):
     """Custom dropdown menu item that displays an icon and full text without truncation."""
-    text = StringProperty("")
     icon = StringProperty("")
 
 from kivy.factory import Factory
@@ -237,24 +249,7 @@ def async_load_texture(image_path: str, callback):
 
 class ClickableImage(ButtonBehavior, AsyncImage):
     """Image that responds to press/release events and supports parent scrolling."""
-    def on_touch_down(self, touch):
-        if self.collide_point(*touch.pos):
-            touch.ud['initial_pos'] = touch.pos
-            return super().on_touch_down(touch)
-        return super().on_touch_down(touch)
-
-    def on_touch_move(self, touch):
-        if touch.grab_current is self:
-            initial_pos = touch.ud.get('initial_pos', None)
-            if initial_pos:
-                dx = abs(touch.x - initial_pos[0])
-                dy = abs(touch.y - initial_pos[1])
-                # If user drags more than 10 dp, cancel touch to let the parent ScrollView scroll
-                if dx > dp(10) or dy > dp(10):
-                    self.state = 'normal'
-                    touch.ungrab(self)
-                    return False
-        return super().on_touch_move(touch)
+    pass
 
 
 class StatusDot(MDBoxLayout):
@@ -976,6 +971,27 @@ class ControlDashboardApp(MDApp):
         from kivy.core.window import Window
         Window.fullscreen = False
         self.status_bar_height = self.get_android_status_bar_height()
+        
+        # Force show Android status bar and disable fullscreen
+        from kivy.utils import platform
+        if platform == 'android':
+            try:
+                from jnius import autoclass
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                activity = PythonActivity.mActivity
+                AndroidWindowManager = autoclass('android.view.WindowManager$LayoutParams')
+                
+                from android.runnable import run_on_ui_thread
+                
+                @run_on_ui_thread
+                def show_status_bar():
+                    window = activity.getWindow()
+                    window.clearFlags(AndroidWindowManager.FLAG_FULLSCREEN)
+                    window.addFlags(AndroidWindowManager.FLAG_FORCE_NOT_FULLSCREEN)
+                
+                show_status_bar()
+            except Exception as e:
+                print(f"[AndroidFullscreen] Failed to show status bar: {e}")
         
         client_cfg = load_client_config()
         theme = client_cfg.get("theme", "Dark")

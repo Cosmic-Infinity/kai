@@ -103,10 +103,10 @@ python modules/image_server.py
 python modules/control_server.py
 
 # Terminal 3 - Dashboard
-python modules/ui.py
+python main.py
 
 # Terminal 4 - Monitor (optional)
-python monitor_mqtt.py
+python tools/monitor_mqtt.py
 ```
 
 ### Test MQTT Connection
@@ -122,27 +122,33 @@ python tools/test_mqtt.py
 
 ```text
 kai/
-├── start.py                 # [SYS] One-command launcher
-├── mqtt_config.py           # MQTT configuration
-├── feeds.py                 # MQTT feed system
-├── requirements.txt         # Dependencies
-├── README.md                # This file
-├── system.txt               # System specification
-│
-├── tools/                   # Maintenance scripts
-│   ├── test_mqtt.py         # Test MQTT connection
-│   ├── monitor_mqtt.py      # Monitor MQTT traffic
-│   └── finetune.py          # Script to finetune YOLO models
-│
-├── modules/                 # Application modules
-│   ├── image_server.py      # Camera processing
-│   ├── control_server.py    # Power control
-│   ├── http_api.py          # Local Web Server
-│   └── ui.py                # Dashboard UI
-│
-├── images_src/              # Source camera images
-├── images_ready/            # Processed images (status tagged)
-└── human-detection-in-classroom/  # Training dataset
+├── .github/                 # GitHub actions configurations
+│   └── workflows/
+│       └── build.yml        # Cloud APK compilation workflow
+├── docs/                    # Technical specifications & documentation
+│   └── system.txt
+├── models/                  # Object detection weights
+│   ├── yolo11m.pt
+│   └── yolo11s.pt
+├── modules/                 # Application core modules
+│   ├── ui.py                # Dashboard logic
+│   ├── ui.kv                # Dashboard layout specifications
+│   ├── feeds.py             # MQTT feed management
+│   ├── image_server.py      # Camera processing and YOLO detector
+│   ├── control_server.py    # Automatic appliance power control
+│   └── http_api.py          # Frame transmission web server
+├── tools/                   # Debugging and utility scripts
+│   ├── test_mqtt.py         # Test broker connection
+│   ├── monitor_mqtt.py      # Print real-time MQTT message feeds
+│   └── finetune.py          # Fine-tuning utilities
+├── buildozer.spec           # Compilation parameters for Android
+├── main.py                  # Android application startup entry
+├── mqtt_config.py           # Main broker configurations
+├── requirements.txt         # Python dependencies
+├── README.md                # System documentation
+├── start.py                 # One-command system environment launcher
+├── images_src/              # Mock raw input frames
+└── images_ready/            # Processed YOLO results cache
 ```
 
 ---

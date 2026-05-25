@@ -135,9 +135,14 @@ class MQTTFeedManager:
     def _connect_loop(self):
         """Connection loop with retry logic."""
         attempt = 0
+        from config_manager import load_config
         
         while True:
             try:
+                dyn_config = load_config()
+                keepalive = dyn_config.get("MQTT_KEEPALIVE", config.MQTT_KEEPALIVE)
+                reconnect_delay = dyn_config.get("MQTT_RECONNECT_DELAY", config.MQTT_RECONNECT_DELAY)
+                
                 if not self._connected:
                     if config.MQTT_MAX_RECONNECT_ATTEMPTS > 0 and attempt >= config.MQTT_MAX_RECONNECT_ATTEMPTS:
                         print(f"[MQTT] Max reconnection attempts ({config.MQTT_MAX_RECONNECT_ATTEMPTS}) reached.")
@@ -154,17 +159,17 @@ class MQTTFeedManager:
                         self._client.connect(
                             config.MQTT_BROKER_HOST,
                             config.MQTT_BROKER_PORT,
-                            config.MQTT_KEEPALIVE
+                            keepalive
                         )
                         
                         self._client.loop_start()
                     except ConnectionRefusedError:
-                        print(f"[MQTT] Connection refused. Is the broker running? Retrying in {config.MQTT_RECONNECT_DELAY}s...")
-                        time.sleep(config.MQTT_RECONNECT_DELAY)
+                        print(f"[MQTT] Connection refused. Is the broker running? Retrying in {reconnect_delay}s...")
+                        time.sleep(reconnect_delay)
                         continue
                     except Exception as conn_err:
-                        print(f"[MQTT] Connection error: {conn_err}. Retrying in {config.MQTT_RECONNECT_DELAY}s...")
-                        time.sleep(config.MQTT_RECONNECT_DELAY)
+                        print(f"[MQTT] Connection error: {conn_err}. Retrying in {reconnect_delay}s...")
+                        time.sleep(reconnect_delay)
                         continue
                     
                     # Wait for connection with timeout
@@ -174,15 +179,15 @@ class MQTTFeedManager:
                         time.sleep(0.1)
                     
                     if not self._connected:
-                        print(f"[MQTT] Connection timeout. Retrying in {config.MQTT_RECONNECT_DELAY}s...")
-                        time.sleep(config.MQTT_RECONNECT_DELAY)
+                        print(f"[MQTT] Connection timeout. Retrying in {reconnect_delay}s...")
+                        time.sleep(reconnect_delay)
                 else:
                     # Connected, reset attempt counter
                     attempt = 0
                     time.sleep(1)
             except Exception as e:
                 print(f"[MQTT] Unexpected error in connection loop: {e}")
-                time.sleep(config.MQTT_RECONNECT_DELAY)
+                time.sleep(reconnect_delay)
     
     def _on_connect(self, client, userdata, flags, reason_code, properties):
         """Callback for when the client connects to the broker."""

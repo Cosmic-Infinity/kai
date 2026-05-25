@@ -1,3 +1,6 @@
 human-detection-in-classroom/
 __pycache__/
-images_ready
+images_ready/
+.buildozer/
+bin/
+*.apk

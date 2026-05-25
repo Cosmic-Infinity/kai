@@ -95,6 +95,7 @@ def camera_monitoring_loop() -> None:
     """
     print(f"[Monitoring Loop] Started - checking camera statuses based on dynamic configuration...")
     camera_inactivity_count: Dict[str, int] = {}
+    last_check_time = 0
 
     while True:
         try:
@@ -102,22 +103,26 @@ def camera_monitoring_loop() -> None:
             interval = config.get("CONTROL_SERVER_INTERVAL", 30)
             threshold = config.get("INACTIVITY_THRESHOLD", 10)
             
-            statuses = get_camera_status()
-            for cam_id, status in statuses.items():
-                if status == "NO":
-                    camera_inactivity_count[cam_id] = camera_inactivity_count.get(cam_id, 0) + 1
-                else:
-                    camera_inactivity_count[cam_id] = 0
+            current_time = time.time()
+            if current_time - last_check_time >= interval:
+                statuses = get_camera_status()
+                for cam_id, status in statuses.items():
+                    if status == "NO":
+                        camera_inactivity_count[cam_id] = camera_inactivity_count.get(cam_id, 0) + 1
+                    else:
+                        camera_inactivity_count[cam_id] = 0
 
-                if camera_inactivity_count.get(cam_id, 0) >= threshold:
-                    write_to_power_feed(f"{cam_id}_OFF")
-                    print(f"[Inactivity] Turned off {cam_id} due to {threshold} consecutive 'NO' statuses.")
-                    camera_inactivity_count[cam_id] = 0
+                    if camera_inactivity_count.get(cam_id, 0) >= threshold:
+                        write_to_power_feed(f"{cam_id}_OFF")
+                        print(f"[Inactivity] Turned off {cam_id} due to {threshold} consecutive 'NO' statuses.")
+                        camera_inactivity_count[cam_id] = 0
+                
+                last_check_time = current_time
             
-            time.sleep(interval)
+            time.sleep(1)
         except Exception as e:
             print(f"[Monitoring Loop] Error: {e}")
-            time.sleep(5)
+            time.sleep(1)
 
 
 def main() -> None:

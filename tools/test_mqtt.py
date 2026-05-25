@@ -32,7 +32,7 @@ def on_connect(client, userdata, flags, reason_code, properties):
             4: "Connection refused - bad username or password",
             5: "Connection refused - not authorized"
         }
-        print(f"✗ Connection failed!")
+        print(f"[FAIL] Connection failed!")
         print(f"  Error code: {reason_code}")
         print(f"  Error: {error_messages.get(reason_code, 'Unknown error')}")
         sys.exit(1)
@@ -40,15 +40,15 @@ def on_connect(client, userdata, flags, reason_code, properties):
 def on_disconnect(client, userdata, flags, reason_code, properties):
     """Callback when disconnected."""
     if reason_code != 0:
-        print(f"✗ Unexpected disconnection (code: {reason_code})")
+        print(f"[FAIL] Unexpected disconnection (code: {reason_code})")
 
 def on_message(client, userdata, msg):
     """Callback when a message is received."""
     payload = msg.payload.decode('utf-8')
-    print(f"✓ Message received successfully!")
+    print(f"[OK] Message received successfully!")
     print(f"  Topic: {msg.topic}")
     print(f"  Payload: {payload}")
-    print("\n✓ All tests passed! MQTT broker is working correctly.")
+    print("\n[OK] All tests passed! MQTT broker is working correctly.")
     
     # Disconnect after successful test
     client.disconnect()
@@ -79,7 +79,7 @@ def main():
         client.loop_stop()
         
     except ConnectionRefusedError:
-        print("\n✗ Connection refused!")
+        print("\n[FAIL] Connection refused!")
         print("  Make sure the MQTT broker (Mosquitto) is running.")
         print("\n  Windows: net start mosquitto")
         print("  Linux:   sudo systemctl start mosquitto")
@@ -87,7 +87,7 @@ def main():
         sys.exit(1)
         
     except Exception as e:
-        print(f"\n✗ Error connecting to broker: {e}")
+        print(f"\n[FAIL] Error connecting to broker: {e}")
         print(f"  Type: {type(e).__name__}")
         sys.exit(1)
 

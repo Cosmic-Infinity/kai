@@ -50,6 +50,7 @@ from kivy.properties import (
     NumericProperty,
     StringProperty,
     BooleanProperty,
+    ColorProperty,
 )
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.image import Image
@@ -58,7 +59,7 @@ from kivy.utils import get_color_from_hex
 
 from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.button import MDRaisedButton, MDIconButton, MDFlatButton
+from kivymd.uix.button import MDRaisedButton, MDIconButton, MDFlatButton, MDRoundFlatIconButton
 from kivymd.uix.screenmanager import MDScreenManager
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.card import MDCard
@@ -68,13 +69,18 @@ import requests
 CLIENT_CONFIG_PATH = os.path.join(PROJECT_ROOT, "client_config.json")
 
 def load_client_config():
+    default_config = {"host": "127.0.0.1", "username": "", "password": "", "theme": "Dark"}
     if os.path.exists(CLIENT_CONFIG_PATH):
         try:
             with open(CLIENT_CONFIG_PATH, 'r') as f:
-                return json.load(f)
+                loaded = json.load(f)
+                for k, v in default_config.items():
+                    if k not in loaded:
+                        loaded[k] = v
+                return loaded
         except:
             pass
-    return {"host": "127.0.0.1", "username": "", "password": ""}
+    return default_config
 
 def save_client_config(config):
     with open(CLIENT_CONFIG_PATH, 'w') as f:
@@ -92,6 +98,9 @@ class LoginScreen(MDScreen):
                 save_client_config({"host": host, "username": username, "password": password})
                 app = MDApp.get_running_app()
                 app.dashboard_widget.api_host = host
+                server_config = r.json()
+                app.dashboard_widget.refresh_interval = server_config.get("DASHBOARD_INTERVAL", 30)
+                app.dashboard_widget.elapsed = 0
                 app.root.current = "dashboard"
                 app.dashboard_widget.load_cameras()
             else:
@@ -102,10 +111,20 @@ class LoginScreen(MDScreen):
 class DashboardScreen(MDScreen):
     pass
 
+class ConfigDialogContent(MDBoxLayout):
+    """Custom layout for configuration inputs with interactive info popups."""
+    def show_info(self, title, desc):
+        from kivymd.uix.snackbar import Snackbar
+        Snackbar(
+            text=f"[b]{title}:[/b] {desc}",
+            bg_color=get_color_from_hex("#1E293B"),
+            text_color=get_color_from_hex("#F8FAFC"),
+            duration=4,
+        ).open()
+
 from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.tooltip import MDTooltip
-from kivymd.uix.dialog import MDDialog
 
 from feeds import append_message, consume_messages
 from config_manager import load_config, save_config
@@ -121,6 +140,17 @@ class TooltipRaisedButton(MDRaisedButton, MDTooltip):
 class TooltipIconButton(MDIconButton, MDTooltip):
     """MDIconButton with tooltip support."""
     pass
+
+
+class TooltipRoundFlatIconButton(MDRoundFlatIconButton, MDTooltip):
+    """MDRoundFlatIconButton with tooltip support."""
+    pass
+
+
+class MenuIconItem(ButtonBehavior, MDBoxLayout):
+    """Custom dropdown menu item that displays an icon and full text without truncation."""
+    text = StringProperty("")
+    icon = StringProperty("")
 
 # ─── Paths & constants ────────────────────────────────────────
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -156,9 +186,16 @@ POWER_OFF_COLOR = get_color_from_hex("#F43F5E")
 
 
 _texture_executor = ThreadPoolExecutor(max_workers=4)
+_texture_cache = {}
 
 def async_load_texture(image_path: str, callback):
     """Load an image in a background thread (locally or over HTTP) and return pixel data via callback."""
+    # Serve directly from cache if available
+    if image_path in _texture_cache:
+        size, data = _texture_cache[image_path]
+        Clock.schedule_once(lambda dt: callback(image_path, size, data), 0)
+        return
+
     def _task():
         try:
             if image_path.startswith("http://") or image_path.startswith("https://"):
@@ -175,6 +212,13 @@ def async_load_texture(image_path: str, callback):
                 
             size = pil_image.size
             data = pil_image.tobytes()
+            _texture_cache[image_path] = (size, data)
+            
+            # Prune cache to prevent memory leak (keep latest 50 images)
+            if len(_texture_cache) > 50:
+                oldest_key = next(iter(_texture_cache))
+                del _texture_cache[oldest_key]
+                
             Clock.schedule_once(lambda dt: callback(image_path, size, data), 0)
         except Exception as e:
             # Only print if it's not a missing file, as those are expected during cleanup
@@ -330,36 +374,59 @@ class FullscreenPreview(ModalView):
         if not self.show_bboxes or not img.texture:
             return
             
-        from kivy.graphics import Color, Line
+        from kivy.graphics import Color, Line, Rectangle
+        from kivy.core.text import Label as CoreLabel
         
-        # Calculate the actual image pos/size within the widget
-        img_ratio = img.texture.width / img.texture.height
-        widget_ratio = img.width / img.height
-        
-        if img_ratio > widget_ratio:
-            # Fit to width
-            draw_w = img.width
-            draw_h = img.width / img_ratio
-            draw_x = img.x
-            draw_y = img.y + (img.height - draw_h) / 2
-        else:
-            # Fit to height
-            draw_h = img.height
-            draw_w = img.height * img_ratio
-            draw_x = img.x + (img.width - draw_w) / 2
-            draw_y = img.y
+        # Calculate the actual image pos/size within the widget using Kivy's native bounds
+        draw_w, draw_h = img.norm_image_size
+        draw_x = img.center_x - draw_w / 2
+        draw_y = img.center_y - draw_h / 2
 
         bboxes = self.bboxes
 
         with img.canvas.after:
             for bbox in bboxes:
                 fx, fy, fw, fh, label, color = bbox
-                Color(*get_color_from_hex(color))
+                box_color = get_color_from_hex(color)
+                
+                # Draw the bounding box rectangle
+                Color(*box_color)
                 x = draw_x + (fx * draw_w)
                 y = draw_y + (fy * draw_h)
                 w = fw * draw_w
                 h = fh * draw_h
                 Line(rectangle=(x, y, w, h), width=2)
+                
+                # Draw the confidence percentage text label badge
+                try:
+                    # Create and refresh CoreLabel to render text texture
+                    core_label = CoreLabel(text=label, font_size=10, bold=True, color=(1, 1, 1, 1))
+                    core_label.refresh()
+                    text_texture = core_label.texture
+                    text_w, text_h = text_texture.size
+                    
+                    badge_w = text_w + 8
+                    badge_h = text_h + 4
+                    badge_x = x
+                    badge_y = y + h # Top of bounding box
+                    
+                    # Ensure the badge does not render off-screen/out-of-image bounds
+                    if badge_y + badge_h > draw_y + draw_h:
+                        badge_y = y + h - badge_h
+                        
+                    # 1. Solid semi-transparent dark background for contrast
+                    Color(15/255, 23/255, 42/255, 0.85) # #0F172A slate with 85% opacity
+                    Rectangle(pos=(badge_x, badge_y), size=(badge_w, badge_h))
+                    
+                    # 2. Sleek accent border matching the bounding box color
+                    Color(*box_color)
+                    Line(rectangle=(badge_x, badge_y, badge_w, badge_h), width=1)
+                    
+                    # 3. Render the text texture
+                    Color(1, 1, 1, 1)
+                    Rectangle(pos=(badge_x + 4, badge_y + 2), size=(text_w, text_h), texture=text_texture)
+                except Exception as text_err:
+                    print(f"[UI] Error rendering bbox text label: {text_err}")
                 
     def on_size(self, *args):
         if hasattr(self, 'ids') and 'preview_image' in self.ids:
@@ -420,24 +487,16 @@ class FullscreenPreview(ModalView):
             return
         self._zoom_level = min(sw / bw, sh / bh)
         self._apply_zoom()
-        if self.show_bboxes:
-            self._update_bboxes_overlay()
 
     def zoom_in(self, *_):
         """Increase zoom by 25%."""
         self._zoom_level = min(self._zoom_level * 1.25, 10.0)
         self._apply_zoom()
-        # Update bounding boxes after fitting
-        if self.show_bboxes:
-            self._update_bboxes_overlay()
 
     def zoom_out(self, *_):
         """Decrease zoom by 25%."""
         self._zoom_level = max(self._zoom_level * 0.8, 0.1)
         self._apply_zoom()
-        # Update bounding boxes after fitting
-        if self.show_bboxes:
-            self._update_bboxes_overlay()
 
     def _apply_zoom(self):
         """Apply current zoom level to the image size."""
@@ -448,6 +507,10 @@ class FullscreenPreview(ModalView):
         img.size = (bw * self._zoom_level, bh * self._zoom_level)
         pct = int(self._zoom_level * 100)
         self.zoom_text = f"{pct}%"
+
+        # Explicitly trigger canvas redraw after modifying zoom boundary size on the screen layout bounds
+        if self.show_bboxes:
+            Clock.schedule_once(lambda dt: self._update_bboxes_overlay(), 0)
 
     # ── actions ──
 
@@ -512,9 +575,10 @@ class Dashboard(MDBoxLayout):
             if r.status_code == 200:
                 data = r.json()
                 self.cameras_data = {}
+                timestamp = int(time.time())
                 for cam_id, info in data.items():
                     # Construct full HTTP URL for the image
-                    img_url = f"http://{self.api_host}:8000{info['image_path']}"
+                    img_url = f"http://{self.api_host}:8000{info['image_path']}?ts={timestamp}"
                     self.cameras_data[cam_id] = (img_url, info["status"], info.get("bboxes", []))
                 self.apply_filters_and_layout()
         except Exception as e:
@@ -567,6 +631,7 @@ class Dashboard(MDBoxLayout):
         self.apply_filters_and_layout()
 
     def open_filter_menu(self):
+        app = MDApp.get_running_app()
         if not self.filter_menu:
             filters = [
                 "All", "Occupied", "Empty", 
@@ -574,42 +639,69 @@ class Dashboard(MDBoxLayout):
                 "Occupied & Power ON", "Occupied & Power OFF",
                 "Empty & Power ON", "Empty & Power OFF"
             ]
+            filter_icons = {
+                "All": "tag-multiple-outline",
+                "Occupied": "account-check",
+                "Empty": "account-off",
+                "Power ON": "power",
+                "Power OFF": "power-off",
+                "Occupied & Power ON": "flash",
+                "Occupied & Power OFF": "flash-off",
+                "Empty & Power ON": "lightning-bolt-outline",
+                "Empty & Power OFF": "power-sleep"
+            }
             menu_items = [
                 {
                     "text": item,
-                    "viewclass": "OneLineListItem",
+                    "viewclass": "MenuIconItem",
+                    "icon": filter_icons.get(item, "tag-outline"),
                     "on_release": lambda x=item: self.set_filter(x),
                 } for item in filters
             ]
             self.filter_menu = MDDropdownMenu(
                 caller=self.ids.filter_btn,
                 items=menu_items,
-                width_mult=4,
-                background_color=get_color_from_hex("#1E293B"),
+                width_mult=7,
+                background_color=app.bg_card,
             )
         self.filter_menu.open()
 
     def open_settings_menu(self, caller_button):
-        if not hasattr(self, 'settings_menu'):
-            menu_items = [
-                {
-                    "text": "Refresh Timers",
-                    "viewclass": "OneLineListItem",
-                    "on_release": self.open_settings_dialog,
-                },
-                {
-                    "text": "Switch Server / Logout",
-                    "viewclass": "OneLineListItem",
-                    "on_release": self.logout,
-                }
-            ]
-            self.settings_menu = MDDropdownMenu(
-                caller=caller_button,
-                items=menu_items,
-                width_mult=4,
-                background_color=get_color_from_hex("#1E293B"),
-            )
+        app = MDApp.get_running_app()
+        theme_text = "Switch to Light Mode" if app.theme_cls.theme_style == "Dark" else "Switch to Dark Mode"
+        
+        menu_items = [
+            {
+                "text": theme_text,
+                "viewclass": "MenuIconItem",
+                "icon": "theme-light-dark",
+                "on_release": self.toggle_theme_style,
+            },
+            {
+                "text": "Refresh Timers",
+                "viewclass": "MenuIconItem",
+                "icon": "cog-outline",
+                "on_release": self.open_settings_dialog,
+            },
+            {
+                "text": "Switch Server / Logout",
+                "viewclass": "MenuIconItem",
+                "icon": "logout",
+                "on_release": self.logout,
+            }
+        ]
+        self.settings_menu = MDDropdownMenu(
+            caller=caller_button,
+            items=menu_items,
+            width_mult=6.5,
+            background_color=app.bg_card,
+        )
         self.settings_menu.open()
+
+    def toggle_theme_style(self, *_):
+        self.settings_menu.dismiss()
+        app = MDApp.get_running_app()
+        app.toggle_theme()
 
     def logout(self, *_):
         if hasattr(self, 'settings_menu'):
@@ -653,6 +745,8 @@ class Dashboard(MDBoxLayout):
                 self.dialog_content.ids.dash_interval.text = str(config.get("DASHBOARD_INTERVAL", 30))
                 self.dialog_content.ids.control_interval.text = str(config.get("CONTROL_SERVER_INTERVAL", 30))
                 self.dialog_content.ids.threshold.text = str(config.get("INACTIVITY_THRESHOLD", 10))
+                self.dialog_content.ids.mqtt_keepalive.text = str(config.get("MQTT_KEEPALIVE", 120))
+                self.dialog_content.ids.mqtt_reconnect_delay.text = str(config.get("MQTT_RECONNECT_DELAY", 2))
         except Exception as e:
             print(f"Failed to load config: {e}")
         
@@ -665,6 +759,8 @@ class Dashboard(MDBoxLayout):
                 "DASHBOARD_INTERVAL": int(self.dialog_content.ids.dash_interval.text or 30),
                 "CONTROL_SERVER_INTERVAL": int(self.dialog_content.ids.control_interval.text or 30),
                 "INACTIVITY_THRESHOLD": int(self.dialog_content.ids.threshold.text or 10),
+                "MQTT_KEEPALIVE": int(self.dialog_content.ids.mqtt_keepalive.text or 120),
+                "MQTT_RECONNECT_DELAY": int(self.dialog_content.ids.mqtt_reconnect_delay.text or 2),
             }
             # Post config via HTTP API
             try:
@@ -794,13 +890,53 @@ class WindowManager(MDScreenManager):
     pass
 
 class ControlDashboardApp(MDApp):
+    # Dynamic theme color properties that automatically bind in KV
+    bg_primary = ColorProperty(get_color_from_hex("#0F172A"))
+    bg_card = ColorProperty(get_color_from_hex("#1E293B"))
+    text_primary = ColorProperty(get_color_from_hex("#F8FAFC"))
+    text_secondary = ColorProperty(get_color_from_hex("#94A3B8"))
+    border_color = ColorProperty(get_color_from_hex("#334155"))
+    elevation_card = NumericProperty(6)
+    elevation_dialog = NumericProperty(4)
+
+    def apply_theme_colors(self, theme_style):
+        if theme_style == "Light":
+            self.bg_primary = get_color_from_hex("#F1F5F9")      # slate-100 (light bg)
+            self.bg_card = get_color_from_hex("#FFFFFF")         # pure white card bg
+            self.text_primary = get_color_from_hex("#0F172A")     # slate-900 (deep dark text)
+            self.text_secondary = get_color_from_hex("#475569")   # slate-600 (muted text)
+            self.border_color = get_color_from_hex("#CBD5E1")     # slate-300 (light border)
+            self.elevation_card = 2                              # subtle card shadow
+            self.elevation_dialog = 1                            # subtle header shadow
+        else:
+            self.bg_primary = get_color_from_hex("#0F172A")      # deep navy bg
+            self.bg_card = get_color_from_hex("#1E293B")         # slate card bg
+            self.text_primary = get_color_from_hex("#F8FAFC")     # near-white text
+            self.text_secondary = get_color_from_hex("#94A3B8")   # muted slate text
+            self.border_color = get_color_from_hex("#334155")     # slate border
+            self.elevation_card = 6
+            self.elevation_dialog = 4
+
+    def toggle_theme(self):
+        self.theme_cls.theme_style = "Light" if self.theme_cls.theme_style == "Dark" else "Dark"
+        cfg = load_client_config()
+        cfg["theme"] = self.theme_cls.theme_style
+        save_client_config(cfg)
+        self.apply_theme_colors(self.theme_cls.theme_style)
+
     def build(self):
-        self.theme_cls.theme_style = "Dark"
+        self.title = "kai Dashboard"
+        
+        client_cfg = load_client_config()
+        theme = client_cfg.get("theme", "Dark")
+        self.theme_cls.theme_style = theme
+        self.apply_theme_colors(theme)
+
         self.theme_cls.primary_palette = "Blue"
         self.theme_cls.accent_palette = "Teal"
         self.theme_cls.material_style = "M3"
 
-        kv_path = os.path.join(PROJECT_ROOT, "ui.kv")
+        kv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui.kv")
         Builder.load_file(kv_path)
         
         sm = WindowManager()

@@ -21,7 +21,7 @@ IMAGE_READY_DIR = os.path.join(PROJECT_ROOT, "images_ready")
 FORCE_REQUEST_FEED = "force_request"
 FORCE_SERVED_FEED = "force_served"
 BATCH_SIZE = 25
-YOLO_MODEL_NAME = os.path.join(PROJECT_ROOT, 'yolo11s.pt')  # Change this to use a different YOLO model
+YOLO_MODEL_NAME = os.path.join(PROJECT_ROOT, 'models', 'yolo11s.pt')  # Change this to use a different YOLO model
 from config_manager import load_config
 
 # --- YOLO Model Initialization ---
@@ -288,11 +288,17 @@ def process_force_requests():
             continue
 
         detection_result = detect_person_in_batch([source_image_path])
-        status = detection_result.get(source_image_path, "NO").upper()
+        res = detection_result.get(source_image_path)
+        if res:
+            status, bboxes = res
+        else:
+            status, bboxes = "NO", []
+            
+        status = status.upper()
         if status not in {"YES", "NO"}:
             status = "NO"
 
-        _write_ready_image(source_image_path, cam_id, status)
+        _write_ready_image(source_image_path, cam_id, status, bboxes)
         append_message(FORCE_SERVED_FEED, f"UPDATED_{cam_id}")
         print(f"[Image Server] Served force update for {cam_id}, status: {status}")
 

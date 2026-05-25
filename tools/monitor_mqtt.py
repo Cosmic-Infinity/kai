@@ -55,17 +55,17 @@ def on_connect(client, userdata, flags, reason_code, properties):
         print(colored("=" * 70 + "\n", Colors.CYAN))
         
     else:
-        print(colored(f"✗ Connection failed (code: {reason_code})", Colors.RED))
+        print(colored(f"[FAIL] Connection failed (code: {reason_code})", Colors.RED))
         sys.exit(1)
 
 def on_disconnect(client, userdata, flags, reason_code, properties):
     """Callback for disconnection."""
     if reason_code == 0:
         timestamp = datetime.now().strftime("%H:%M:%S")
-        print(colored(f"\n[{timestamp}] ✓ Clean disconnect", Colors.GREEN))
+        print(colored(f"\n[{timestamp}] [OK] Clean disconnect", Colors.GREEN))
     else:
         timestamp = datetime.now().strftime("%H:%M:%S")
-        print(colored(f"\n[{timestamp}] ✗ Disconnected unexpectedly (code: {reason_code})", Colors.RED))
+        print(colored(f"\n[{timestamp}] [FAIL] Disconnected unexpectedly (code: {reason_code})", Colors.RED))
 
 def on_message(client, userdata, msg):
     """Callback when a message is received."""
@@ -76,19 +76,19 @@ def on_message(client, userdata, msg):
     # Color code based on topic
     if "force_request" in topic:
         topic_color = Colors.YELLOW
-        icon = "📤"
+        icon = "[REQ]"
     elif "force_served" in topic:
         topic_color = Colors.GREEN
-        icon = "✓"
+        icon = "[OK]"
     elif "control" in topic:
         topic_color = Colors.BLUE
-        icon = "🎮"
+        icon = "[CMD]"
     elif "power" in topic or "POWER" in topic:
-        topic_color = Colors.RED
-        icon = "⚡"
+        topic_color = Colors.HEADER
+        icon = "[PWR]"
     else:
         topic_color = Colors.CYAN
-        icon = "📨"
+        icon = "[MSG]"
     
     # Display message
     print(f"{colored(f'[{timestamp}]', Colors.CYAN)} {icon} {colored(topic, topic_color)}")
@@ -98,7 +98,7 @@ def on_message(client, userdata, msg):
 def main():
     """Main monitoring loop."""
     print(colored("=" * 70, Colors.HEADER))
-    print(colored("KAI IoT System - MQTT Traffic Monitor", Colors.HEADER))
+    print(colored("kai IoT System - MQTT Traffic Monitor", Colors.HEADER))
     print(colored("=" * 70, Colors.HEADER))
     
     # Create MQTT client with callback API version 2
@@ -130,14 +130,14 @@ def main():
         sys.exit(0)
         
     except ConnectionRefusedError:
-        print(colored("\n✗ Connection refused!", Colors.RED))
+        print(colored("\n[FAIL] Connection refused!", Colors.RED))
         print(colored("Make sure Mosquitto is running:", Colors.YELLOW))
         print("  Windows: net start mosquitto")
         print("  Linux:   sudo systemctl start mosquitto")
         sys.exit(1)
         
     except Exception as e:
-        print(colored(f"\n✗ Error: {e}", Colors.RED))
+        print(colored(f"\n[FAIL] Error: {e}", Colors.RED))
         sys.exit(1)
 
 if __name__ == "__main__":

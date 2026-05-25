@@ -33,7 +33,7 @@ def colored(text, color):
 def print_banner():
     """Print the startup banner."""
     print(colored("=" * 70, Colors.CYAN))
-    print(colored("[KAI] IoT System Launcher", Colors.HEADER + Colors.BOLD))
+    print(colored("[kai] IoT System Launcher", Colors.HEADER + Colors.BOLD))
     print(colored("=" * 70, Colors.CYAN))
     print()
 
@@ -208,27 +208,27 @@ def main():
         {
             'name': 'Image Server',
             'script': 'modules\\image_server.py' if platform.system() == 'Windows' else 'modules/image_server.py',
-            'title': 'KAI - Image Server'
+            'title': 'kai - Image Server'
         },
         {
             'name': 'Control Server',
             'script': 'modules\\control_server.py' if platform.system() == 'Windows' else 'modules/control_server.py',
-            'title': 'KAI - Control Server'
-        },
-        {
-            'name': 'Dashboard UI',
-            'script': 'modules\\ui.py' if platform.system() == 'Windows' else 'modules/ui.py',
-            'title': 'KAI - Dashboard'
+            'title': 'kai - Control Server'
         },
         {
             'name': 'MQTT Monitor',
             'script': 'tools\\monitor_mqtt.py' if platform.system() == 'Windows' else 'tools/monitor_mqtt.py',
-            'title': 'KAI - MQTT Monitor'
+            'title': 'kai - MQTT Monitor'
         },
         {
             'name': 'HTTP API Server',
             'script': 'modules\\http_api.py' if platform.system() == 'Windows' else 'modules/http_api.py',
-            'title': 'KAI - HTTP API'
+            'title': 'kai - HTTP API'
+        },
+        {
+            'name': 'Dashboard UI',
+            'script': 'modules\\ui.py' if platform.system() == 'Windows' else 'modules/ui.py',
+            'title': 'kai - Dashboard Terminal'
         },
     ]
     

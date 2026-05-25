@@ -159,14 +159,14 @@ kai/
 
 ```python
 # Broker settings
-MQTT_BROKER_HOST = "localhost"  # Change for remote broker
+MQTT_BROKER_HOST = "[IP_ADDRESS]"  # Change for remote broker
 MQTT_BROKER_PORT = 1883         # Default MQTT port
 
-# Authentication (optional)
-MQTT_USERNAME = None            # Set if required
-MQTT_PASSWORD = None            # Set if required
+# Authentication (as required)
+MQTT_USERNAME = None            # Set as required
+MQTT_PASSWORD = None            # Set as required
 
-# Security (production)
+# Security (deployment)
 MQTT_USE_TLS = False            # Enable for encrypted connections
 MQTT_QOS = 1                    # Quality of Service (0, 1, or 2)
 ```
@@ -267,7 +267,6 @@ python modules/ui.py
 | ------------------------- | ----------------------------------------- |
 | **"Connection refused"**  | Start Mosquitto: `net start mosquitto`    |
 | **"Import paho.mqtt"**    | Install: `pip install paho-mqtt`          |
-| **Slow UI response**      | Already fixed! Now ~100ms response time   |
 | **Images not processing** | Check `images_src/` has `CAM_*.jpg` files |
 | **Messages not received** | Verify topic names in `mqtt_config.py`    |
 

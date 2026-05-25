@@ -194,7 +194,6 @@
     md_bg_color: app.bg_card
     radius: [dp(16)]
     elevation: 0
-    ripple_behavior: True
 
     canvas.before:
         Color:
@@ -299,7 +298,7 @@
     # ── Action buttons ──
     BoxLayout:
         size_hint_y: None
-        height: dp(56)
+        height: sp(56)
         padding: dp(14), dp(4), dp(14), dp(14)
         spacing: dp(8)
 
@@ -352,18 +351,16 @@
 
     Widget:
         size_hint_y: None
-        height: dp(14)
+        height: sp(14)
 
-    # ── Control strip ──
+    # ── Control strip (Responsive 2-Row Layout) ──
     MDCard:
         size_hint_y: None
-        height: dp(64)
+        height: sp(112)
         md_bg_color: app.bg_card
         radius: [dp(12)]
         elevation: 0
-        padding: dp(16), dp(8)
-        spacing: dp(12)
-        orientation: "horizontal"
+        padding: [dp(16), dp(8), dp(16), dp(8)]
         size_hint_x: 0.95
         pos_hint: {"center_x": 0.5}
 
@@ -374,73 +371,93 @@
                 rounded_rectangle: (self.x, self.y, self.width, self.height, dp(12))
                 width: dp(1)
 
-        MDTextField:
-            id: search_field
-            hint_text: "Search..."
-            icon_left: "magnify"
-            mode: "round"
-            size_hint_x: 0.45
-            line_color_focus: get_color_from_hex("#3B82F6")
-            text_color_normal: app.text_secondary
-            text_color_focus: app.text_primary
-            hint_text_color_normal: app.text_secondary
-            font_size: sp(14)
-            pos_hint: {"center_y": 0.5}
-            on_text: root.on_filter_changed()
+        BoxLayout:
+            orientation: "vertical"
+            spacing: sp(8)
 
-        MDRaisedButton:
-            id: filter_btn
-            text: "Filter: All"
-            icon: "filter-variant"
-            md_bg_color: app.border_color
-            text_color: app.text_primary
-            elevation: 0
-            font_size: sp(14)
-            size_hint_x: 0.25
-            pos_hint: {"center_y": 0.5}
-            on_release: root.open_filter_menu()
+            # Row 1: Search and Filter side-by-side
+            BoxLayout:
+                orientation: "horizontal"
+                spacing: sp(12)
+                size_hint_y: None
+                height: sp(44)
 
-        MDLabel:
-            id: camera_count_label
-            text: "0 cameras"
-            halign: "center"
-            theme_text_color: "Custom"
-            text_color: app.text_secondary
-            font_style: "Body2"
-            bold: True
-            size_hint_x: 0.15
-            pos_hint: {"center_y": 0.5}
+                MDTextField:
+                    id: search_field
+                    hint_text: "Search cameras..."
+                    icon_left: "magnify"
+                    mode: "round"
+                    size_hint_x: 0.65
+                    line_color_focus: get_color_from_hex("#3B82F6")
+                    text_color_normal: app.text_secondary
+                    text_color_focus: app.text_primary
+                    hint_text_color_normal: app.text_secondary
+                    font_size: sp(14)
+                    pos_hint: {"center_y": 0.5}
+                    on_text: root.on_filter_changed()
 
-        MDCard:
-            size_hint: None, None
-            size: dp(75), dp(32)
-            pos_hint: {"center_y": 0.5}
-            md_bg_color: app.border_color
-            radius: [dp(16)]
-            elevation: 0
-            padding: dp(8), 0
-            spacing: dp(4)
+                MDRaisedButton:
+                    id: filter_btn
+                    text: "Filter: All"
+                    icon: "filter-variant"
+                    md_bg_color: app.border_color
+                    text_color: app.text_primary
+                    elevation: 0
+                    font_size: sp(14)
+                    size_hint_x: 0.35
+                    pos_hint: {"center_y": 0.5}
+                    on_release: root.open_filter_menu()
 
-            MDIcon:
-                icon: "timer-outline"
-                theme_text_color: "Custom"
-                text_color: app.text_secondary
-                pos_hint: {"center_y": 0.5}
-                font_size: sp(16)
-                tooltip_text: "Auto-refresh timer"
+            # Row 2: Camera Count and Refresh Timer
+            BoxLayout:
+                orientation: "horizontal"
+                size_hint_y: None
+                height: sp(32)
 
-            MDLabel:
-                id: timer_label
-                text: "30s"
-                halign: "right"
-                theme_text_color: "Custom"
-                text_color: app.text_primary
-                font_style: "Subtitle2"
-                bold: True
+                MDLabel:
+                    id: camera_count_label
+                    text: "0 cameras"
+                    halign: "left"
+                    valign: "middle"
+                    theme_text_color: "Custom"
+                    text_color: app.text_secondary
+                    font_style: "Body2"
+                    bold: True
+                    pos_hint: {"center_y": 0.5}
+
+                Widget:
+                    size_hint_x: 1
+
+                MDCard:
+                    size_hint: None, None
+                    size: sp(75), sp(30)
+                    pos_hint: {"center_y": 0.5}
+                    md_bg_color: app.border_color
+                    radius: [dp(16)]
+                    elevation: 0
+                    padding: dp(8), 0
+                    spacing: dp(4)
+
+                    MDIcon:
+                        icon: "timer-outline"
+                        theme_text_color: "Custom"
+                        text_color: app.text_secondary
+                        pos_hint: {"center_y": 0.5}
+                        font_size: sp(16)
+                        tooltip_text: "Auto-refresh timer"
+
+                    MDLabel:
+                        id: timer_label
+                        text: "30s"
+                        halign: "right"
+                        theme_text_color: "Custom"
+                        text_color: app.text_primary
+                        font_style: "Subtitle2"
+                        bold: True
 
     Widget:
         size_hint_y: None
-        height: dp(14)
+        height: sp(14)
 
     # ── Camera grid (virtualized) ──
     RecycleView:
@@ -485,7 +502,7 @@
         # Header
         MDCard:
             size_hint_y: None
-            height: dp(52)
+            height: sp(52)
             md_bg_color: app.bg_card
             radius: [dp(12)]
             elevation: 0
@@ -590,16 +607,14 @@
                     size_hint: None, None
                     size: dp(200), dp(200)
 
-        # Bottom controls
+        # Bottom controls (Responsive 2-Row Layout)
         MDCard:
             size_hint_y: None
-            height: dp(56)
+            height: sp(112) if self.width > dp(450) else sp(160)
             md_bg_color: app.bg_card
             radius: [dp(12)]
             elevation: 0
-            padding: dp(10), dp(6)
-            orientation: "horizontal"
-            spacing: dp(6)
+            padding: [dp(12), dp(8), dp(12), dp(8)]
 
             canvas.before:
                 Color:
@@ -608,94 +623,114 @@
                     rounded_rectangle: (self.x, self.y, self.width, self.height, dp(12))
                     width: dp(1)
 
-            TooltipIconButton:
-                icon: "magnify-minus"
-                icon_size: "20sp"
-                size_hint: None, None
-                size: dp(40), dp(40)
-                theme_icon_color: "Custom"
-                icon_color: app.text_primary
-                line_color: app.border_color
-                line_width: dp(1)
-                pos_hint: {"center_y": 0.5}
-                tooltip_text: "Zoom out"
-                on_release: root.zoom_out()
+            BoxLayout:
+                orientation: "vertical"
+                spacing: sp(8)
 
-            TooltipIconButton:
-                icon: "magnify-plus"
-                icon_size: "20sp"
-                size_hint: None, None
-                size: dp(40), dp(40)
-                theme_icon_color: "Custom"
-                icon_color: app.text_primary
-                line_color: app.border_color
-                line_width: dp(1)
-                pos_hint: {"center_y": 0.5}
-                tooltip_text: "Zoom in"
-                on_release: root.zoom_in()
+                # Row 1: Image Manipulation Controls and BBox Toggles
+                BoxLayout:
+                    orientation: "horizontal"
+                    spacing: sp(8)
+                    size_hint_y: None
+                    height: sp(40)
 
-            TooltipIconButton:
-                icon: "fit-to-screen"
-                icon_size: "20sp"
-                size_hint: None, None
-                size: dp(40), dp(40)
-                theme_icon_color: "Custom"
-                icon_color: get_color_from_hex("#10B981")
-                line_color: get_color_from_hex("#10B981")
-                line_width: dp(1)
-                pos_hint: {"center_y": 0.5}
-                tooltip_text: "Fit image to screen"
-                on_release: root.fit_image()
+                    TooltipIconButton:
+                        icon: "magnify-minus"
+                        icon_size: "20sp"
+                        size_hint: None, None
+                        size: sp(40), sp(40)
+                        theme_icon_color: "Custom"
+                        icon_color: app.text_primary
+                        line_color: app.border_color
+                        line_width: dp(1)
+                        pos_hint: {"center_y": 0.5}
+                        tooltip_text: "Zoom out"
+                        on_release: root.zoom_out()
 
-            MDLabel:
-                id: zoom_label
-                text: root.zoom_text
-                halign: "center"
-                theme_text_color: "Custom"
-                text_color: app.text_secondary
-                font_style: "Caption"
-                size_hint_x: None
-                pos_hint: {"center_y": 0.5}
-                width: dp(60)
+                    TooltipIconButton:
+                        icon: "magnify-plus"
+                        icon_size: "20sp"
+                        size_hint: None, None
+                        size: sp(40), sp(40)
+                        theme_icon_color: "Custom"
+                        icon_color: app.text_primary
+                        line_color: app.border_color
+                        line_width: dp(1)
+                        pos_hint: {"center_y": 0.5}
+                        tooltip_text: "Zoom in"
+                        on_release: root.zoom_in()
 
-            Widget:
-                size_hint_x: 0.05
+                    TooltipIconButton:
+                        icon: "fit-to-screen"
+                        icon_size: "20sp"
+                        size_hint: None, None
+                        size: sp(40), sp(40)
+                        theme_icon_color: "Custom"
+                        icon_color: get_color_from_hex("#10B981")
+                        line_color: get_color_from_hex("#10B981")
+                        line_width: dp(1)
+                        pos_hint: {"center_y": 0.5}
+                        tooltip_text: "Fit image to screen"
+                        on_release: root.fit_image()
 
-            TooltipRoundFlatIconButton:
-                text: "Refresh"
-                icon: "refresh"
-                line_color: get_color_from_hex("#3B82F6")
-                text_color: get_color_from_hex("#3B82F6")
-                icon_color: get_color_from_hex("#3B82F6")
-                line_width: dp(1.2)
-                pos_hint: {"center_y": 0.5}
-                tooltip_text: "Force update this camera"
-                on_release: root.do_force_update()
+                    MDLabel:
+                        id: zoom_label
+                        text: root.zoom_text
+                        halign: "center"
+                        theme_text_color: "Custom"
+                        text_color: app.text_secondary
+                        font_style: "Caption"
+                        size_hint_x: None
+                        pos_hint: {"center_y": 0.5}
+                        width: sp(60)
 
-            TooltipRoundFlatIconButton:
-                id: preview_toggle_btn
-                text: root.power_btn_text
-                icon: "power"
-                line_color: root.power_color
-                text_color: root.power_color
-                icon_color: root.power_color
-                line_width: dp(1.2)
-                pos_hint: {"center_y": 0.5}
-                tooltip_text: "Toggle camera power"
-                on_release: root.do_toggle_power()
-                
-            TooltipIconButton:
-                icon: "monitor-eye" if root.show_bboxes else "monitor-off"
-                icon_size: "20sp"
-                size_hint: None, None
-                size: dp(40), dp(40)
-                theme_icon_color: "Custom"
-                icon_color: get_color_from_hex("#8B5CF6") if root.show_bboxes else app.text_primary
-                line_color: get_color_from_hex("#8B5CF6") if root.show_bboxes else app.border_color
-                line_width: dp(1)
-                pos_hint: {"center_y": 0.5}
-                tooltip_text: "Toggle ML detection boxes"
-                on_release: root.toggle_bboxes()
+                    Widget:
+                        size_hint_x: 1
+
+                    TooltipIconButton:
+                        icon: "monitor-eye" if root.show_bboxes else "monitor-off"
+                        icon_size: "20sp"
+                        size_hint: None, None
+                        size: sp(40), sp(40)
+                        theme_icon_color: "Custom"
+                        icon_color: get_color_from_hex("#8B5CF6") if root.show_bboxes else app.text_primary
+                        line_color: get_color_from_hex("#8B5CF6") if root.show_bboxes else app.border_color
+                        line_width: dp(1)
+                        pos_hint: {"center_y": 0.5}
+                        tooltip_text: "Toggle ML detection boxes"
+                        on_release: root.toggle_bboxes()
+
+                # Row 2: Camera Actions (Refresh & Power)
+                BoxLayout:
+                    orientation: "horizontal" if self.parent.parent.width > dp(450) else "vertical"
+                    spacing: sp(12)
+                    size_hint_y: None
+                    height: sp(44) if self.parent.parent.width > dp(450) else sp(96)
+
+                    TooltipRoundFlatIconButton:
+                        text: "Refresh"
+                        icon: "refresh"
+                        line_color: get_color_from_hex("#3B82F6")
+                        text_color: get_color_from_hex("#3B82F6")
+                        icon_color: get_color_from_hex("#3B82F6")
+                        line_width: dp(1.2)
+                        size_hint_x: 0.5 if self.parent.parent.width > dp(450) else 1.0
+                        pos_hint: {"center_y": 0.5}
+                        tooltip_text: "Force update this camera"
+                        on_release: root.do_force_update()
+
+                    TooltipRoundFlatIconButton:
+                        id: preview_toggle_btn
+                        text: root.power_btn_text
+                        icon: "power"
+                        line_color: root.power_color
+                        text_color: root.power_color
+                        icon_color: root.power_color
+                        line_width: dp(1.2)
+                        size_hint_x: 0.5 if self.parent.parent.width > dp(450) else 1.0
+                        pos_hint: {"center_y": 0.5}
+                        tooltip_text: "Toggle camera power"
+                        on_release: root.do_toggle_power()
 
 <ConfigDialogContent>:
     orientation: "vertical"

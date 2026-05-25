@@ -230,8 +230,25 @@ def async_load_texture(image_path: str, callback):
 # ─── Widgets ──────────────────────────────────────────────────
 
 class ClickableImage(ButtonBehavior, AsyncImage):
-    """Image that responds to press/release events."""
-    pass
+    """Image that responds to press/release events and supports parent scrolling."""
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            touch.ud['initial_pos'] = touch.pos
+            return super().on_touch_down(touch)
+        return super().on_touch_down(touch)
+
+    def on_touch_move(self, touch):
+        if touch.grab_current is self:
+            initial_pos = touch.ud.get('initial_pos', None)
+            if initial_pos:
+                dx = abs(touch.x - initial_pos[0])
+                dy = abs(touch.y - initial_pos[1])
+                # If user drags more than 10 dp, cancel touch to let the parent ScrollView scroll
+                if dx > dp(10) or dy > dp(10):
+                    self.state = 'normal'
+                    touch.ungrab(self)
+                    return False
+        return super().on_touch_move(touch)
 
 
 class StatusDot(MDBoxLayout):
@@ -621,6 +638,11 @@ class Dashboard(MDBoxLayout):
         self.apply_filters_and_layout()
 
     def open_filter_menu(self):
+        if hasattr(self, 'filter_menu') and self.filter_menu:
+            self.filter_menu.dismiss()
+            self.filter_menu = None
+            return
+
         app = MDApp.get_running_app()
         if not self.filter_menu:
             filters = [
@@ -645,7 +667,7 @@ class Dashboard(MDBoxLayout):
                     "text": item,
                     "viewclass": "MenuIconItem",
                     "icon": filter_icons.get(item, "tag-outline"),
-                    "on_release": lambda x=item: self.set_filter(x),
+                    "on_release": lambda widget, x=item: self.set_filter(x),
                 } for item in filters
             ]
             self.filter_menu = MDDropdownMenu(
@@ -657,6 +679,11 @@ class Dashboard(MDBoxLayout):
         self.filter_menu.open()
 
     def open_settings_menu(self, caller_button):
+        if hasattr(self, 'settings_menu') and self.settings_menu:
+            self.settings_menu.dismiss()
+            self.settings_menu = None
+            return
+
         app = MDApp.get_running_app()
         theme_text = "Switch to Light Mode" if app.theme_cls.theme_style == "Dark" else "Switch to Dark Mode"
         

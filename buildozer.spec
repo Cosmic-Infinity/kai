@@ -64,6 +64,9 @@ orientation = portrait
 # (list) Android permissions to add
 android.permissions = INTERNET
 
+# (int) Fullscreen mode, 0 to disable, 1 to enable (default is 1)
+android.fullscreen = 0
+
 # (int) Target Android API, should be as high as possible.
 android.api = 34
 

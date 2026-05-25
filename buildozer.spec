@@ -45,7 +45,7 @@ requirements = python3, kivy==2.3.1, kivymd==1.2.0, requests, paho-mqtt, pillow,
 #icon.filename = %(source.dir)s/images/icon.png
 
 # (str) Supported orientations (one of landscape, sensorLandscape, portrait or all)
-orientation = all
+orientation = portrait
 
 # (list) List of service to declare
 #services = NAME:ENTRYPOINT_TO_PY,NAME2:ENTRYPOINT2_TO_PY

@@ -53,7 +53,7 @@ from kivy.properties import (
     ColorProperty,
 )
 from kivy.uix.behaviors import ButtonBehavior
-from kivy.uix.image import Image
+from kivy.uix.image import Image, AsyncImage
 from kivy.uix.modalview import ModalView
 from kivy.utils import get_color_from_hex
 
@@ -229,7 +229,7 @@ def async_load_texture(image_path: str, callback):
 
 # ─── Widgets ──────────────────────────────────────────────────
 
-class ClickableImage(ButtonBehavior, Image):
+class ClickableImage(ButtonBehavior, AsyncImage):
     """Image that responds to press/release events."""
     pass
 
@@ -284,16 +284,7 @@ class CameraCard(MDCard):
 
     def on_current_image_path(self, instance, value):
         if value:
-            async_load_texture(value, self._apply_texture)
-
-    def _apply_texture(self, path, size, data):
-        # Prevent applying old texture if cell was recycled to a new camera
-        if self.current_image_path != path:
-            return
-        texture = Texture.create(size=size)
-        texture.blit_buffer(data, colorfmt="rgb", bufferfmt="ubyte")
-        texture.flip_vertical()
-        self.ids.cam_image.texture = texture
+            self.ids.cam_image.source = value
 
     # ── callbacks wired from KV ──
 
@@ -463,17 +454,16 @@ class FullscreenPreview(ModalView):
 
     def reload_image(self):
         if self.image_path:
-            async_load_texture(self.image_path, self._apply_preview_texture)
+            img = self.ids.preview_image
+            img.unbind(texture=self._on_preview_texture_loaded)
+            img.bind(texture=self._on_preview_texture_loaded)
+            img.source = self.image_path
         self._refresh_labels()
 
-    def _apply_preview_texture(self, path, size, data):
-        texture = Texture.create(size=size)
-        texture.blit_buffer(data, colorfmt="rgb", bufferfmt="ubyte")
-        texture.flip_vertical()
-        img = self.ids.preview_image
-        img.texture = texture
-        self._base_size = size
-        self.fit_image()
+    def _on_preview_texture_loaded(self, img, texture):
+        if texture:
+            self._base_size = texture.size
+            self.fit_image()
 
     def fit_image(self, *_):
         """Reset zoom to fit the image within the scroll area."""
@@ -898,6 +888,7 @@ class ControlDashboardApp(MDApp):
     border_color = ColorProperty(get_color_from_hex("#334155"))
     elevation_card = NumericProperty(6)
     elevation_dialog = NumericProperty(4)
+    status_bar_height = NumericProperty(0)
 
     def apply_theme_colors(self, theme_style):
         if theme_style == "Light":
@@ -926,6 +917,7 @@ class ControlDashboardApp(MDApp):
 
     def build(self):
         self.title = "kai Dashboard"
+        self.status_bar_height = self.get_android_status_bar_height()
         
         client_cfg = load_client_config()
         theme = client_cfg.get("theme", "Dark")
@@ -969,6 +961,22 @@ class ControlDashboardApp(MDApp):
                 sm.current = "login"
         
         return sm
+
+    def get_android_status_bar_height(self) -> float:
+        from kivy.utils import platform
+        if platform == 'android':
+            try:
+                from jnius import autoclass
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                activity = PythonActivity.mActivity
+                resources = activity.getResources()
+                resource_id = resources.getIdentifier('status_bar_height', 'dimen', 'android')
+                if resource_id > 0:
+                    height_px = resources.getDimensionPixelSize(resource_id)
+                    return float(height_px / dp(1))
+            except Exception as e:
+                print(f"[AndroidStatusBar] Failed to retrieve height: {e}")
+        return 0.0
 
 if __name__ == "__main__":
     ControlDashboardApp().run()

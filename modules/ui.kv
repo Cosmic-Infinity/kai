@@ -49,6 +49,7 @@
 
 <LoginScreen>:
     md_bg_color: app.bg_primary
+    padding: [0, app.status_bar_height, 0, 0]
     ScrollView:
         do_scroll_x: False
         do_scroll_y: True
@@ -112,6 +113,7 @@
                     hint_text: "Server IP Address"
                     text: "127.0.0.1"
                     mode: "rectangle"
+                    unfocus_on_touch: False
                     icon_left: "server"
                     line_color_focus: get_color_from_hex("#3B82F6")
                     text_color_normal: app.text_secondary
@@ -124,6 +126,7 @@
                     id: user_input
                     hint_text: "MQTT Username"
                     mode: "rectangle"
+                    unfocus_on_touch: False
                     icon_left: "account"
                     line_color_focus: get_color_from_hex("#3B82F6")
                     text_color_normal: app.text_secondary
@@ -137,6 +140,7 @@
                     hint_text: "MQTT Password"
                     password: True
                     mode: "rectangle"
+                    unfocus_on_touch: False
                     icon_left: "lock"
                     line_color_focus: get_color_from_hex("#3B82F6")
                     text_color_normal: app.text_secondary
@@ -330,6 +334,7 @@
 <Dashboard>:
     orientation: "vertical"
     md_bg_color: app.bg_primary
+    padding: [0, app.status_bar_height, 0, 0]
 
     # ── Top App Bar ──
     MDTopAppBar:
@@ -469,7 +474,7 @@
     BoxLayout:
         orientation: "vertical"
         spacing: dp(8)
-        padding: dp(10)
+        padding: [dp(10), dp(10) + app.status_bar_height, dp(10), dp(10)]
         canvas.before:
             Color:
                 rgba: app.bg_primary
@@ -579,7 +584,7 @@
                 anchor_x: "center"
                 anchor_y: "center"
 
-                Image:
+                AsyncImage:
                     id: preview_image
                     fit_mode: "contain"
                     size_hint: None, None

@@ -152,6 +152,12 @@ class MenuIconItem(ButtonBehavior, MDBoxLayout):
     text = StringProperty("")
     icon = StringProperty("")
 
+from kivy.factory import Factory
+Factory.register('TooltipRaisedButton', cls=TooltipRaisedButton)
+Factory.register('TooltipIconButton', cls=TooltipIconButton)
+Factory.register('TooltipRoundFlatIconButton', cls=TooltipRoundFlatIconButton)
+Factory.register('MenuIconItem', cls=MenuIconItem)
+
 # ─── Paths & constants ────────────────────────────────────────
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FORCE_REQUEST_FEED = "force_request"
@@ -278,6 +284,12 @@ class CameraCard(MDCard):
     power_color = ListProperty(list(POWER_ON_COLOR))
     power_badge_color = ListProperty(list(get_color_from_hex("#065F46")))
 
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            if super().on_touch_down(touch):
+                return True
+        return False
+
     def on_current_status(self, instance, value):
         self.ui_state = "ON" if value == "YES" else "OFF"
         if self.ui_state == "ON":
@@ -372,6 +384,7 @@ class FullscreenPreview(ModalView):
         self.bind(on_open=lambda *_: Clock.schedule_once(self.fit_image, 0.05))
 
     def toggle_bboxes(self):
+        print(f"[UI] Toggled bboxes. Current state: {self.show_bboxes} -> {not self.show_bboxes}")
         self.show_bboxes = not self.show_bboxes
         self._update_bboxes_overlay()
 
@@ -408,7 +421,9 @@ class FullscreenPreview(ModalView):
                 # Draw the confidence percentage text label badge
                 try:
                     # Create and refresh CoreLabel to render text texture
-                    core_label = CoreLabel(text=label, font_size=10, bold=True, color=(1, 1, 1, 1))
+                    core_label = CoreLabel(text=label, font_size=10, bold=True)
+                    core_label.options['color'] = (1, 1, 1, 1)
+                    core_label.refresh()
                     core_label.refresh()
                     text_texture = core_label.texture
                     text_w, text_h = text_texture.size
@@ -667,15 +682,15 @@ class Dashboard(MDBoxLayout):
                     "text": item,
                     "viewclass": "MenuIconItem",
                     "icon": filter_icons.get(item, "tag-outline"),
-                    "on_release": lambda widget, x=item: self.set_filter(x),
+                    "on_release": lambda *a, x=item: self.set_filter(x),
                 } for item in filters
             ]
             self.filter_menu = MDDropdownMenu(
                 caller=self.ids.filter_btn,
                 items=menu_items,
                 width_mult=7,
-                background_color=app.bg_card,
             )
+            self.filter_menu.bind(on_dismiss=lambda *a: setattr(self, 'filter_menu', None))
         self.filter_menu.open()
 
     def open_settings_menu(self, caller_button):
@@ -711,8 +726,8 @@ class Dashboard(MDBoxLayout):
             caller=caller_button,
             items=menu_items,
             width_mult=6.5,
-            background_color=app.bg_card,
         )
+        self.settings_menu.bind(on_dismiss=lambda *a: setattr(self, 'settings_menu', None))
         self.settings_menu.open()
 
     def toggle_theme_style(self, *_):
@@ -944,6 +959,8 @@ class ControlDashboardApp(MDApp):
 
     def build(self):
         self.title = "kai Dashboard"
+        from kivy.core.window import Window
+        Window.fullscreen = False
         self.status_bar_height = self.get_android_status_bar_height()
         
         client_cfg = load_client_config()

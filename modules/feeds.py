@@ -81,12 +81,18 @@ class MQTTFeedManager:
         import time as _time
         client_id = f"{config.MQTT_CLIENT_ID_PREFIX}_{int(_time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
         
-        # Create client with clean session and callback API version 2
-        self._client = mqtt.Client(
-            client_id=client_id, 
-            clean_session=True,
-            callback_api_version=mqtt.CallbackAPIVersion.VERSION2
-        )
+        # Create client with clean session and handle paho-mqtt 1.x and 2.x compatibility
+        try:
+            self._client = mqtt.Client(
+                client_id=client_id, 
+                clean_session=True,
+                callback_api_version=mqtt.CallbackAPIVersion.VERSION2
+            )
+        except (AttributeError, TypeError):
+            self._client = mqtt.Client(
+                client_id=client_id, 
+                clean_session=True
+            )
         
         # Set callbacks
         self._client.on_connect = self._on_connect
@@ -189,8 +195,9 @@ class MQTTFeedManager:
                 print(f"[MQTT] Unexpected error in connection loop: {e}")
                 time.sleep(reconnect_delay)
     
-    def _on_connect(self, client, userdata, flags, reason_code, properties):
+    def _on_connect(self, client, userdata, flags, *args, **kwargs):
         """Callback for when the client connects to the broker."""
+        reason_code = args[0] if args else kwargs.get('reason_code', kwargs.get('rc', 0))
         if reason_code == 0:
             print("[MQTT] Successfully connected to broker.")
             self._connected = True
@@ -203,10 +210,20 @@ class MQTTFeedManager:
         else:
             print(f"[MQTT] Connection failed with code {reason_code}")
             self._connected = False
-    
-    def _on_disconnect(self, client, userdata, flags, reason_code, properties):
+            
+    def _on_disconnect(self, client, userdata, *args, **kwargs):
         """Callback for when the client disconnects from the broker."""
         self._connected = False
+        # Extract reason code (rc) compatibly for paho-mqtt 1.x and 2.x
+        reason_code = 0
+        if args:
+            if len(args) >= 3:
+                reason_code = args[1]  # paho-mqtt 2.x: (flags, reason_code, properties)
+            else:
+                reason_code = args[0]  # paho-mqtt 1.x: (rc)
+        else:
+            reason_code = kwargs.get('reason_code', kwargs.get('rc', 0))
+
         if reason_code != 0:
             # Error codes: 1=protocol, 2=client ID, 3=server unavailable, 4=bad auth, 5=not authorized, 7=network
             error_msgs = {

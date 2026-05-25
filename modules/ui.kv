@@ -382,19 +382,35 @@
                 size_hint_y: None
                 height: sp(44)
 
-                MDTextField:
-                    id: search_field
-                    hint_text: "Search cameras..."
-                    icon_left: "magnify"
-                    mode: "round"
+                RelativeLayout:
                     size_hint_x: 0.65
-                    line_color_focus: get_color_from_hex("#3B82F6")
-                    text_color_normal: app.text_secondary
-                    text_color_focus: app.text_primary
-                    hint_text_color_normal: app.text_secondary
-                    font_size: sp(14)
                     pos_hint: {"center_y": 0.5}
-                    on_text: root.on_filter_changed()
+
+                    MDTextField:
+                        id: search_field
+                        hint_text: "Search cameras..."
+                        icon_left: "magnify"
+                        mode: "round"
+                        size_hint: 1, 1
+                        pos_hint: {"center_x": 0.5, "center_y": 0.5}
+                        line_color_focus: get_color_from_hex("#3B82F6")
+                        text_color_normal: app.text_secondary
+                        text_color_focus: app.text_primary
+                        hint_text_color_normal: app.text_secondary
+                        font_size: sp(14)
+                        on_text: root.on_filter_changed()
+
+                    MDIconButton:
+                        icon: "close"
+                        icon_size: "16sp"
+                        size_hint: None, None
+                        size: sp(30), sp(30)
+                        pos_hint: {"right": 0.98, "center_y": 0.5}
+                        theme_icon_color: "Custom"
+                        icon_color: app.text_secondary
+                        on_release: search_field.text = ""
+                        opacity: 1 if search_field.text else 0
+                        disabled: not search_field.text
 
                 MDRaisedButton:
                     id: filter_btn
@@ -465,6 +481,8 @@
         viewclass: "CameraCard"
         do_scroll_x: False
         do_scroll_y: True
+        scroll_type: ["content", "bars"]
+        scroll_distance: dp(10)
         bar_color: get_color_from_hex("#3B82F6")
         bar_inactive_color: app.border_color
         bar_width: dp(4)

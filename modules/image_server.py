@@ -299,7 +299,7 @@ def process_force_requests():
             status = "NO"
 
         _write_ready_image(source_image_path, cam_id, status, bboxes)
-        append_message(FORCE_SERVED_FEED, f"UPDATED_{cam_id}")
+        append_message(FORCE_SERVED_FEED, f"FORCE_SERVED_{cam_id}")
         print(f"[Image Server] Served force update for {cam_id}, status: {status}")
 
 

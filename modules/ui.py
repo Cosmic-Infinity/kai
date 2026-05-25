@@ -105,6 +105,16 @@ class LoginScreen(MDScreen):
         try:
             r = requests.get(f"http://{host}:8000/api/config", timeout=2)
             if r.status_code == 200:
+                # Probe MQTT port reachability for diagnostics
+                import socket
+                try:
+                    sock = socket.create_connection((host, MQTT_BROKER_PORT), timeout=3)
+                    sock.close()
+                    print(f"[Login] MQTT port {MQTT_BROKER_PORT} reachable at {host}")
+                except Exception as mqtt_err:
+                    print(f"[Login] WARNING: MQTT port {MQTT_BROKER_PORT} NOT reachable at {host}: {mqtt_err}")
+                    print(f"[Login] MQTT features (force update, power control) may not work.")
+
                 feeds.feed_manager.start()
                 save_client_config({"host": host, "username": username, "password": password})
                 app = MDApp.get_running_app()
@@ -382,75 +392,81 @@ class FullscreenPreview(ModalView):
         self.bind(on_open=lambda *_: Clock.schedule_once(self.fit_image, 0.05))
 
     def toggle_bboxes(self):
-        print(f"[UI] Toggled bboxes. Current state: {self.show_bboxes} -> {not self.show_bboxes}")
         self.show_bboxes = not self.show_bboxes
-        self._update_bboxes_overlay()
+        print(f"[UI] toggle_bboxes -> show_bboxes={self.show_bboxes}, bboxes={len(self.bboxes)}")
+        try:
+            self._update_bboxes_overlay()
+        except Exception as e:
+            print(f"[UI] ERROR in _update_bboxes_overlay: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _update_bboxes_overlay(self):
+        if 'preview_image' not in self.ids:
+            print("[UI] _update_bboxes_overlay: preview_image widget not available")
+            return
         img = self.ids.preview_image
         img.canvas.after.clear()
-        
-        print(f"[UI] _update_bboxes_overlay — show_bboxes: {self.show_bboxes}, bboxes count: {len(self.bboxes)}")
-        
-        if not self.show_bboxes or not img.texture:
+
+        has_texture = img.texture is not None
+        print(f"[UI] _update_bboxes_overlay: show={self.show_bboxes}, count={len(self.bboxes)}, texture={has_texture}")
+
+        if not self.show_bboxes or not has_texture:
             return
-            
+
         from kivy.graphics import Color, Line, Rectangle
         from kivy.core.text import Label as CoreLabel
-        
-        # Calculate coordinate boundaries directly using the actual zoomed layout size of the image widget
+        from kivy.metrics import sp as _sp
+
         draw_w = img.width
         draw_h = img.height
         draw_x = img.x
         draw_y = img.y
-
-        bboxes = self.bboxes
+        print(f"[UI] Drawing area: pos=({draw_x:.0f},{draw_y:.0f}) size=({draw_w:.0f},{draw_h:.0f})")
 
         with img.canvas.after:
-            for bbox in bboxes:
-                fx, fy, fw, fh, label, color = bbox
-                box_color = get_color_from_hex(color)
-                
-                # Draw the bounding box rectangle
-                Color(*box_color)
-                x = draw_x + (fx * draw_w)
-                y = draw_y + (fy * draw_h)
-                w = fw * draw_w
-                h = fh * draw_h
-                Line(rectangle=(x, y, w, h), width=2)
-                
-                # Draw the confidence percentage text label badge
+            for i, bbox in enumerate(self.bboxes):
                 try:
-                    # Create and refresh CoreLabel to render text texture
-                    core_label = CoreLabel(text=label, font_size=10, bold=True)
-                    core_label.options['color'] = (1, 1, 1, 1)
-                    core_label.refresh()
+                    fx, fy, fw, fh, label, color = bbox
+                    box_color = get_color_from_hex(color)
+
+                    # Draw bounding box
+                    Color(*box_color)
+                    x = draw_x + (fx * draw_w)
+                    y = draw_y + (fy * draw_h)
+                    w = fw * draw_w
+                    h = fh * draw_h
+                    Line(rectangle=(x, y, w, h), width=2)
+                    print(f"[UI] BBox[{i}]: rect=({x:.0f},{y:.0f},{w:.0f},{h:.0f}) {label}")
+
+                    # Draw confidence label badge
+                    core_label = CoreLabel(text=label, font_size=_sp(11), bold=True, color=(1, 1, 1, 1))
                     core_label.refresh()
                     text_texture = core_label.texture
-                    text_w, text_h = text_texture.size
-                    
-                    badge_w = text_w + 8
-                    badge_h = text_h + 4
-                    badge_x = x
-                    badge_y = y + h # Top of bounding box
-                    
-                    # Ensure the badge does not render off-screen/out-of-image bounds
-                    if badge_y + badge_h > draw_y + draw_h:
-                        badge_y = y + h - badge_h
-                        
-                    # 1. Solid semi-transparent dark background for contrast
-                    Color(15/255, 23/255, 42/255, 0.85) # #0F172A slate with 85% opacity
-                    Rectangle(pos=(badge_x, badge_y), size=(badge_w, badge_h))
-                    
-                    # 2. Sleek accent border matching the bounding box color
-                    Color(*box_color)
-                    Line(rectangle=(badge_x, badge_y, badge_w, badge_h), width=1)
-                    
-                    # 3. Render the text texture
-                    Color(1, 1, 1, 1)
-                    Rectangle(pos=(badge_x + 4, badge_y + 2), size=(text_w, text_h), texture=text_texture)
-                except Exception as text_err:
-                    print(f"[UI] Error rendering bbox text label: {text_err}")
+                    if text_texture:
+                        text_w, text_h = text_texture.size
+                        badge_w = text_w + 8
+                        badge_h = text_h + 4
+                        badge_x = x
+                        badge_y = y + h  # Top of bounding box
+
+                        # Ensure the badge does not render off-screen/out-of-image bounds
+                        if badge_y + badge_h > draw_y + draw_h:
+                            badge_y = y + h - badge_h
+
+                        # Solid semi-transparent dark background for contrast
+                        Color(15/255, 23/255, 42/255, 0.85)
+                        Rectangle(pos=(badge_x, badge_y), size=(badge_w, badge_h))
+
+                        # Accent border matching the bounding box color
+                        Color(*box_color)
+                        Line(rectangle=(badge_x, badge_y, badge_w, badge_h), width=1)
+
+                        # Render the text
+                        Color(1, 1, 1, 1)
+                        Rectangle(pos=(badge_x + 4, badge_y + 2), size=(text_w, text_h), texture=text_texture)
+                except Exception as bbox_err:
+                    print(f"[UI] Error rendering bbox[{i}]: {bbox_err}")
                 
     def on_size(self, *args):
         if hasattr(self, 'ids') and 'preview_image' in self.ids:
@@ -589,7 +605,7 @@ class Dashboard(MDBoxLayout):
 
     # ─── camera discovery ─────────────────────────────────────
 
-    def load_cameras(self) -> None:
+    def load_cameras(self, updated_cams=None) -> None:
         if not hasattr(self, 'api_host') or not self.api_host:
             return
             
@@ -597,15 +613,27 @@ class Dashboard(MDBoxLayout):
             r = requests.get(f"http://{self.api_host}:8000/api/cameras", timeout=5)
             if r.status_code == 200:
                 data = r.json()
-                self.cameras_data = {}
+                if not hasattr(self, 'cameras_data'):
+                    self.cameras_data = {}
                 timestamp = int(time.time())
                 for cam_id, info in data.items():
-                    # Construct full HTTP URL for the image
-                    img_url = f"http://{self.api_host}:8000{info['image_path']}?ts={timestamp}"
-                    self.cameras_data[cam_id] = (img_url, info["status"], info.get("bboxes", []))
+                    needs_refresh = True
+                    if updated_cams is not None and cam_id not in updated_cams:
+                        if cam_id in self.cameras_data:
+                            needs_refresh = False
+                            
+                    if needs_refresh:
+                        img_url = f"http://{self.api_host}:8000{info['image_path']}?ts={timestamp}"
+                    else:
+                        img_url = self.cameras_data[cam_id][0]
+                        
+                    bboxes = info.get("bboxes", [])
+                    self.cameras_data[cam_id] = (img_url, info["status"], bboxes)
+                    if bboxes and needs_refresh:
+                        print(f"[Dashboard] {cam_id}: {len(bboxes)} bounding boxes loaded")
                 self.apply_filters_and_layout()
         except Exception as e:
-            print(f"Failed to fetch cameras: {e}")
+            print(f"[Dashboard] Failed to fetch cameras: {e}")
 
     # ─── grid / filters ──────────────────────────────────────
 
@@ -887,15 +915,17 @@ class Dashboard(MDBoxLayout):
 
     def _poll_force_served(self, dt):
         messages = consume_messages(FORCE_SERVED_FEED)
+        updated_cams = set()
         for msg in messages:
             if msg.startswith("FORCE_SERVED_"):
                 cam_id = msg.replace("FORCE_SERVED_", "")
                 if cam_id in self.pending_force_updates:
                     self.pending_force_updates.remove(cam_id)
                     print(f"[Dashboard] Force update completed for {cam_id}")
+                updated_cams.add(cam_id)
         
-        if messages:
-            self.load_cameras()
+        if updated_cams:
+            self.load_cameras(updated_cams=updated_cams)
 
     def request_force_update(self, camera_id: str) -> None:
         self.pending_force_updates.add(camera_id)
@@ -1019,19 +1049,27 @@ class ControlDashboardApp(MDApp):
         # Auto login if cached
         client_cfg = load_client_config()
         if client_cfg.get("host") and client_cfg.get("username"):
-            # Set credentials and test
             import feeds
+            import socket
             from mqtt_config import MQTT_BROKER_PORT
-            feeds.feed_manager.configure(client_cfg["host"], MQTT_BROKER_PORT, client_cfg["username"], client_cfg["password"])
+            host = client_cfg["host"]
+            feeds.feed_manager.configure(host, MQTT_BROKER_PORT, client_cfg["username"], client_cfg["password"])
             try:
+                # Test MQTT port reachability
+                try:
+                    sock = socket.create_connection((host, MQTT_BROKER_PORT), timeout=3)
+                    sock.close()
+                    print(f"[AutoLogin] MQTT port {MQTT_BROKER_PORT} reachable at {host}")
+                except Exception as mqtt_err:
+                    print(f"[AutoLogin] WARNING: MQTT port {MQTT_BROKER_PORT} NOT reachable at {host}: {mqtt_err}")
+
                 feeds.feed_manager.start()
-                # Also test HTTP API
-                r = requests.get(f"http://{client_cfg['host']}:8000/api/config", timeout=2)
+                r = requests.get(f"http://{host}:8000/api/config", timeout=2)
                 if r.status_code == 200:
-                    self.dashboard_widget.api_host = client_cfg["host"]
+                    self.dashboard_widget.api_host = host
                     sm.current = "dashboard"
             except Exception as e:
-                print(f"Auto-login failed: {e}")
+                print(f"[AutoLogin] Auto-login failed: {e}")
                 sm.current = "login"
         
         return sm

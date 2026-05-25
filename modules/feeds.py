@@ -159,7 +159,8 @@ class MQTTFeedManager:
                     
                     attempt += 1
                     if attempt == 1:
-                        print(f"[MQTT] Connecting to broker at {config.MQTT_BROKER_HOST}:{config.MQTT_BROKER_PORT}...")
+                        auth_info = f"user={config.MQTT_USERNAME}" if config.MQTT_USERNAME else "no auth"
+                        print(f"[MQTT] Connecting to broker at {config.MQTT_BROKER_HOST}:{config.MQTT_BROKER_PORT} ({auth_info})...")
                     else:
                         print(f"[MQTT] Reconnection attempt {attempt}...")
                     
@@ -274,7 +275,7 @@ class MQTTFeedManager:
         """
         self._ensure_connection_started()
         if not self._connected:
-            print(f"[MQTT] Not connected. Cannot publish to {feed_name}")
+            print(f"[MQTT] Not connected (broker={config.MQTT_BROKER_HOST}:{config.MQTT_BROKER_PORT}). Cannot publish to {feed_name}: {message}")
             return False
         
         topic = self._get_topic(feed_name)

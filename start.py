@@ -54,8 +54,8 @@ def check_mqtt_broker():
     try:
         import paho.mqtt.client as mqtt
         
-        # Load credentials if configured
-        import mqtt_config as config
+        from modules.config_manager import get_config_namespace
+        config = get_config_namespace()
         
         connected = [False]
         
@@ -87,7 +87,7 @@ def check_mqtt_broker():
             return True
         else:
             print(colored("[FAIL] MQTT broker connection failed (could not authenticate or connect)", Colors.RED))
-            print(colored("  Verify your credentials in mqtt_config.py are correct.", Colors.YELLOW))
+            print(colored("  Verify your credentials in config/config.json are correct.", Colors.YELLOW))
             return False
             
     except ImportError:
@@ -240,11 +240,6 @@ def main():
             'script': 'modules\\http_api.py' if platform.system() == 'Windows' else 'modules/http_api.py',
             'title': 'kai - HTTP API'
         },
-        {
-            'name': 'Dashboard UI',
-            'script': 'modules\\ui.py' if platform.system() == 'Windows' else 'modules/ui.py',
-            'title': 'kai - Dashboard Terminal'
-        },
     ]
     
     # Launch modules
@@ -258,7 +253,7 @@ def main():
     
     print()
     print(colored("=" * 70, Colors.CYAN))
-    print(colored(f"[OK] Launched {len(processes)} modules successfully!", Colors.GREEN + Colors.BOLD))
+    print(colored(f"[OK] Launched {len(processes)} backend modules successfully!", Colors.GREEN + Colors.BOLD))
     print(colored("=" * 70, Colors.CYAN))
     print()
     print(colored("System is starting up...", Colors.CYAN))
@@ -266,6 +261,9 @@ def main():
     print(colored("Modules launched:", Colors.BOLD))
     for module in modules:
         print(f"  • {module['name']}")
+    print()
+    print(colored("To launch the UI dashboard:", Colors.GREEN + Colors.BOLD))
+    print("  Run 'cd dashboard; flutter run' in a new terminal to start the Flutter Dashboard UI!")
     print()
     print(colored("To stop the system:", Colors.YELLOW))
     print("  1. Close each terminal window, OR")

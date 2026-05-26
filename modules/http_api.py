@@ -41,7 +41,32 @@ def discover_cameras():
     return cameras
 
 class KAIRequestHandler(SimpleHTTPRequestHandler):
+    def is_authorized(self):
+        config = load_config()
+        server_key = config.get("API_KEY", "")
+        if not server_key:
+            return True
+        
+        client_key = self.headers.get("X-API-Key", "")
+        if not client_key:
+            auth_header = self.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                client_key = auth_header[7:].strip()
+                
+        return client_key == server_key
+
+    def send_unauthorized(self):
+        self.send_response(401)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(json.dumps({"error": "Unauthorized - Invalid X-API-Key"}).encode('utf-8'))
+
     def do_GET(self):
+        if not self.is_authorized():
+            self.send_unauthorized()
+            return
+            
         parsed = urlparse(self.path)
         if parsed.path == "/api/cameras":
             self.send_response(200)
@@ -69,6 +94,10 @@ class KAIRequestHandler(SimpleHTTPRequestHandler):
         return super().translate_path(path)
 
     def do_POST(self):
+        if not self.is_authorized():
+            self.send_unauthorized()
+            return
+            
         parsed = urlparse(self.path)
         if parsed.path == "/api/config":
             content_length = int(self.headers['Content-Length'])

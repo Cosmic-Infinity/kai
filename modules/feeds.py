@@ -18,7 +18,8 @@ from typing import Iterable, List, Dict, Callable, Optional
 
 import paho.mqtt.client as mqtt
 
-import mqtt_config as config
+from config_manager import get_config_namespace
+config = get_config_namespace()
 
 
 class MQTTFeedManager:

@@ -13,7 +13,8 @@ from datetime import datetime
 # Add project root to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import mqtt_config as config
+from modules.config_manager import get_config_namespace
+config = get_config_namespace()
 
 # Color codes for terminal (Windows PowerShell compatible)
 class Colors:

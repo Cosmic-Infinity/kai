@@ -11,59 +11,64 @@ class ApiService {
 
   String get baseUrl => 'http://$host:$port';
 
-  Map<String, String> get _headers {
-    final headers = <String, String>{};
-    if (apiKey != null && apiKey!.isNotEmpty) {
-      headers['X-API-Key'] = apiKey!;
-    }
-    return headers;
-  }
+  Map<String, String> get _headers => {
+    if (apiKey != null && apiKey!.isNotEmpty) 'X-API-Key': apiKey!,
+  };
 
-  /// Probe check to see if server is online and valid config exists
+  /// Probe check — fetches current system config from server
   Future<Map<String, dynamic>?> fetchConfig() async {
     try {
-      final url = Uri.parse('$baseUrl/api/config');
-      final response = await http.get(url, headers: _headers).timeout(const Duration(seconds: 4));
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/config'), headers: _headers)
+          .timeout(const Duration(seconds: 4));
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
     } catch (e) {
-      print('[ApiService] Error fetching config: $e');
+      print('[ApiService] fetchConfig error: $e');
     }
     return null;
   }
 
-  /// Fetches camera properties and statuses
+  /// Fetches all camera states from the REST API
   Future<Map<String, Camera>?> fetchCameras(Map<String, String> currentPowerStates) async {
     try {
-      final url = Uri.parse('$baseUrl/api/cameras');
-      final response = await http.get(url, headers: _headers).timeout(const Duration(seconds: 5));
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/cameras'), headers: _headers)
+          .timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final Map<String, Camera> cameras = {};
-        
-        data.forEach((camId, jsonMap) {
-          final powerState = currentPowerStates[camId] ?? 'ON';
-          final relativePath = jsonMap['image_path'] as String? ?? '';
-          final timestamp = DateTime.now().millisecondsSinceEpoch;
-          final absolutePath = relativePath.isNotEmpty 
-              ? '$baseUrl$relativePath?ts=$timestamp' 
+        return data.map((camId, jsonMap) {
+          // Rewrite relative image path to absolute URL with cache-bust timestamp
+          final relativePath = (jsonMap as Map<String, dynamic>)['image_path'] as String? ?? '';
+          final absolutePath = relativePath.isNotEmpty
+              ? '$baseUrl$relativePath?ts=${DateTime.now().millisecondsSinceEpoch}'
               : '';
-          
-          final Map<String, dynamic> updatedJson = Map<String, dynamic>.from(jsonMap);
-          updatedJson['image_path'] = absolutePath;
-
-          cameras[camId] = Camera.fromJson(
+          final updatedJson = {...jsonMap, 'image_path': absolutePath};
+          return MapEntry(
             camId,
-            updatedJson,
-            powerState: powerState,
+            Camera.fromJson(camId, updatedJson, powerState: currentPowerStates[camId] ?? 'ON'),
           );
         });
-        return cameras;
       }
     } catch (e) {
-      print('[ApiService] Error fetching cameras: $e');
+      print('[ApiService] fetchCameras error: $e');
     }
     return null;
+  }
+
+  /// Posts updated system configuration to the server
+  Future<bool> saveConfig(Map<String, int> settings) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/config'),
+        headers: {..._headers, 'Content-Type': 'application/json'},
+        body: jsonEncode(settings),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print('[ApiService] saveConfig error: $e');
+      return false;
+    }
   }
 }

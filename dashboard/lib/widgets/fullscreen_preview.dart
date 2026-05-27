@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/camera.dart';
 import '../providers/dashboard_provider.dart';
+import 'camera_card.dart';
 
 class FullscreenPreview extends StatefulWidget {
   final Camera camera;
@@ -19,32 +20,22 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
   double _zoomLevel = 1.0;
   Size _viewportSize = Size.zero;
 
-  void _showDisconnectedSnackBar(BuildContext context, DashboardProvider provider) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(Icons.wifi_off, color: Colors.amberAccent, size: 20),
-            SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'MQTT disconnected. Attempting to reconnect...',
-                style: TextStyle(fontSize: 13),
-              ),
-            ),
-          ],
-        ),
+  void _onOfflineAction(BuildContext context, DashboardProvider provider) {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content: const Row(children: [
+          Icon(Icons.wifi_off, color: Colors.amberAccent, size: 20),
+          SizedBox(width: 10),
+          Expanded(child: Text('MQTT disconnected. Attempting to reconnect...')),
+        ]),
         duration: const Duration(seconds: 3),
         action: SnackBarAction(
           label: 'RETRY',
           textColor: Colors.amberAccent,
-          onPressed: () {
-            provider.startDashboard();
-          },
+          onPressed: provider.startDashboard,
         ),
-      ),
-    );
+      ));
     provider.startDashboard();
   }
 
@@ -61,9 +52,9 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
       final double cx = _viewportSize.width / 2;
       final double cy = _viewportSize.height / 2;
       _transformationController.value = Matrix4.identity()
-        ..translate(cx, cy)
+        ..translate(cx, cy, 0.0)
         ..scale(_zoomLevel)
-        ..translate(-cx, -cy);
+        ..translate(-cx, -cy, 0.0);
     });
   }
 
@@ -76,12 +67,10 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final provider = Provider.of<DashboardProvider>(context);
 
-    // Dynamic color indicators
-    final colorSuccess = const Color(0xFF10B981);
-    final colorDanger = const Color(0xFFF43F5E);
-    final colorUnknown = const Color(0xFF64748B);
+    const colorSuccess = Color(0xFF10B981);
+    const colorDanger  = Color(0xFFF43F5E);
+    const colorUnknown = Color(0xFF64748B);
 
-    // Get current instance from provider to catch real-time MQTT modifications
     final currentCamera = provider.cameras[widget.camera.id] ?? widget.camera;
     final isOccupied = currentCamera.status == 'YES';
     final isEmpty = currentCamera.status == 'NO';
@@ -89,17 +78,8 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
     final isPendingUpdate = provider.pendingForceUpdates.contains(currentCamera.id);
     final isMqttConnected = provider.isMqttConnected;
 
-    final statusColor = isOccupied
-        ? colorSuccess
-        : isEmpty
-            ? colorDanger
-            : colorUnknown;
-
-    final statusText = isOccupied
-        ? 'OCCUPIED'
-        : isEmpty
-            ? 'EMPTY'
-            : 'UNKNOWN';
+    final statusColor = isOccupied ? colorSuccess : isEmpty ? colorDanger : colorUnknown;
+    final statusText  = isOccupied ? 'OCCUPIED'   : isEmpty ? 'EMPTY'     : 'UNKNOWN';
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -168,7 +148,7 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
               // Image Area with Pan & Zoom & Custom BBoxes
               Expanded(
                 child: Container(
-                  color: Colors.black.withOpacity(0.2),
+                  color: Colors.black.withValues(alpha: 0.2),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       _viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
@@ -198,7 +178,7 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.6),
+                                color: Colors.black.withValues(alpha: 0.6),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
@@ -216,9 +196,9 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
                               borderRadius: BorderRadius.circular(12),
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.65),
+                                  color: Colors.black.withValues(alpha: 0.65),
                                   border: Border.all(
-                                    color: Colors.white.withOpacity(0.15),
+                                    color: Colors.white.withValues(alpha: 0.15),
                                     width: 1,
                                   ),
                                 ),
@@ -307,7 +287,7 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
                                       if (isMqttConnected) {
                                         provider.togglePowerState(currentCamera.id, currentCamera.powerState);
                                       } else {
-                                        _showDisconnectedSnackBar(context, provider);
+                                        _onOfflineAction(context, provider);
                                       }
                                     },
                                     icon: Icon(
@@ -316,7 +296,7 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
                                     ),
                                     label: Text(isPowerOn ? 'SHUTDOWN' : 'ACTIVATE'),
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: isPowerOn ? Colors.green[800] : Colors.red[800],
+                              backgroundColor: isPowerOn ? const Color(0xFF166534) : const Color(0xFF991B1B),
                                       foregroundColor: Colors.white,
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -337,7 +317,7 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
                                             if (isMqttConnected) {
                                               provider.requestForceUpdate(currentCamera.id);
                                             } else {
-                                              _showDisconnectedSnackBar(context, provider);
+                                              _onOfflineAction(context, provider);
                                             }
                                           },
                                     style: OutlinedButton.styleFrom(
@@ -393,7 +373,7 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
                               if (isMqttConnected) {
                                 provider.togglePowerState(currentCamera.id, currentCamera.powerState);
                               } else {
-                                _showDisconnectedSnackBar(context, provider);
+                                _onOfflineAction(context, provider);
                               }
                             },
                             icon: Icon(
@@ -402,7 +382,7 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
                             ),
                             label: Text(isPowerOn ? 'SHUTDOWN' : 'ACTIVATE'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: isPowerOn ? Colors.green[800] : Colors.red[800],
+                              backgroundColor: isPowerOn ? const Color(0xFF166534) : const Color(0xFF991B1B),
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
@@ -422,7 +402,7 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
                                       if (isMqttConnected) {
                                         provider.requestForceUpdate(currentCamera.id);
                                       } else {
-                                        _showDisconnectedSnackBar(context, provider);
+                                        _onOfflineAction(context, provider);
                                       }
                                     },
                               style: OutlinedButton.styleFrom(
@@ -517,7 +497,7 @@ class BBoxPainter extends CustomPainter {
 
       // Draw background rectangle for text
       final badgeRect = Rect.fromLTWH(left, badgeY, badgeWidth, badgeHeight);
-      final bgPaint = Paint()..color = const Color(0xFF0F172A).withOpacity(0.85); // Slate background
+      final bgPaint = Paint()..color = const Color(0xFF0F172A).withValues(alpha: 0.85);
       final borderPaint = Paint()
         ..color = color
         ..style = PaintingStyle.stroke
@@ -604,6 +584,7 @@ class _BBoxImagePreviewState extends State<_BBoxImagePreview> {
     final apiKey = Provider.of<DashboardProvider>(context, listen: false).apiKey;
     final provider = CachedNetworkImageProvider(
       widget.imageUrl,
+      cacheManager: cameraCacheManager,
       headers: apiKey.isNotEmpty ? {'X-API-Key': apiKey} : null,
     );
     _imageStream = provider.resolve(const ImageConfiguration());
@@ -654,12 +635,13 @@ class _BBoxImagePreviewState extends State<_BBoxImagePreview> {
           children: [
             CachedNetworkImage(
               imageUrl: widget.imageUrl,
+              cacheManager: cameraCacheManager,
               fit: BoxFit.fill,
               httpHeaders: apiKey.isNotEmpty ? {'X-API-Key': apiKey} : null,
-              placeholder: (_, __) => const Center(
+              placeholder: (context, url) => const Center(
                 child: CircularProgressIndicator(),
               ),
-              errorWidget: (_, __, ___) => const Center(
+              errorWidget: (context, url, error) => const Center(
                 child: Icon(Icons.videocam_off, size: 64, color: Colors.grey),
               ),
             ),

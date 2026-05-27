@@ -1,26 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:dynamic_color/dynamic_color.dart';
 import 'providers/dashboard_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 
+// ─── Cyber-Telemetry Premium Design Tokens ───────────────────────────────────
+const _cosmicNavy = Color(0xFF161E2E);
+const _cosmicSpace = Color(0xFF0B0F19);
+const _electricCyan = Color(0xFF00E5FF);
+const _electricIndigo = Color(0xFF4F46E5);
+// ─────────────────────────────────────────────────────────────────────────────
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Make status bar transparent and edge-to-edge
+  // Edge-to-edge: transparent status bar
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: Color(0xFF0F172A),
+    systemNavigationBarColor: _cosmicSpace,
   ));
 
-  final dashboardProvider = DashboardProvider();
-  await dashboardProvider.initialize();
+  final provider = DashboardProvider();
+  await provider.initialize();
 
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => dashboardProvider,
+    ChangeNotifierProvider.value(
+      value: provider,
       child: const MyApp(),
     ),
   );
@@ -31,66 +39,73 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<DashboardProvider>(context);
+    // Only rebuild MaterialApp when themeMode or login state changes, not on every timer/camera update
+    final themeMode = context.select<DashboardProvider, ThemeMode>((p) => p.themeMode);
+    final hasHost = context.select<DashboardProvider, bool>((p) => p.host.isNotEmpty);
 
-    // Premium Material 3 styling
-    return MaterialApp(
-      title: 'KAI Dashboard',
-      debugShowCheckedModeBanner: false,
-      themeMode: provider.themeMode,
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.light,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF3B82F6), // Blue accent
+    return DynamicColorBuilder(
+      builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+        // Fallback color schemes if Material You is unavailable (e.g. older Android versions or Windows)
+        final lightScheme = lightDynamic ?? ColorScheme.fromSeed(
+          seedColor: _electricIndigo,
           brightness: Brightness.light,
-          primary: const Color(0xFF2563EB),
+          primary: _electricIndigo,
           surface: Colors.white,
-        ),
-        cardTheme: const CardThemeData(elevation: 2),
-        appBarTheme: AppBarTheme(
-          centerTitle: false,
-          elevation: 0,
-          systemOverlayStyle: SystemUiOverlayStyle(
-            statusBarColor: Colors.transparent,
-            statusBarIconBrightness: Brightness.dark,
-            systemNavigationBarColor: Colors.white,
-          ),
-        ),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF3B82F6), // Blue accent
+        );
+
+        final darkScheme = darkDynamic ?? ColorScheme.fromSeed(
+          seedColor: _electricCyan,
           brightness: Brightness.dark,
-          primary: const Color(0xFF3B82F6),
-          surface: const Color(0xFF1E293B), // slate-800
-          background: const Color(0xFF0F172A), // slate-900
-        ),
-        scaffoldBackgroundColor: const Color(0xFF0F172A),
-        cardTheme: const CardThemeData(
-          color: Color(0xFF1E293B),
-          elevation: 6,
-        ),
-        appBarTheme: AppBarTheme(
-          backgroundColor: const Color(0xFF1E293B),
-          centerTitle: false,
-          elevation: 0,
-          systemOverlayStyle: SystemUiOverlayStyle(
-            statusBarColor: Colors.transparent,
-            statusBarIconBrightness: Brightness.light,
-            systemNavigationBarColor: const Color(0xFF0F172A),
+          primary: _electricCyan,
+          surface: _cosmicNavy,
+        );
+
+        return MaterialApp(
+          title: 'KAI Dashboard',
+          debugShowCheckedModeBanner: false,
+          themeMode: themeMode,
+
+          theme: ThemeData(
+            useMaterial3: true,
+            colorScheme: lightScheme,
+            cardTheme: const CardThemeData(elevation: 2),
+            appBarTheme: const AppBarTheme(
+              centerTitle: false,
+              elevation: 0,
+              systemOverlayStyle: SystemUiOverlayStyle(
+                statusBarColor: Colors.transparent,
+                statusBarIconBrightness: Brightness.dark,
+                systemNavigationBarColor: Colors.white,
+              ),
+            ),
           ),
-        ),
-      ),
-      // Auto routing: if credentials exist, skip login screen and boot straight to dashboard
-      home: provider.host.isNotEmpty && provider.username.isNotEmpty
-          ? const DashboardScreen()
-          : const LoginScreen(),
-      routes: {
-        '/login': (_) => const LoginScreen(),
-        '/dashboard': (_) => const DashboardScreen(),
+
+          darkTheme: ThemeData(
+            useMaterial3: true,
+            colorScheme: darkScheme,
+            scaffoldBackgroundColor: darkDynamic != null ? null : _cosmicSpace,
+            cardTheme: CardThemeData(
+              color: darkDynamic != null ? null : _cosmicNavy,
+              elevation: 4,
+            ),
+            appBarTheme: AppBarTheme(
+              backgroundColor: darkDynamic != null ? null : _cosmicNavy,
+              centerTitle: false,
+              elevation: 0,
+              systemOverlayStyle: const SystemUiOverlayStyle(
+                statusBarColor: Colors.transparent,
+                statusBarIconBrightness: Brightness.light,
+                systemNavigationBarColor: _cosmicSpace,
+              ),
+            ),
+          ),
+
+          home: hasHost ? const DashboardScreen() : const LoginScreen(),
+          routes: {
+            '/login': (_) => const LoginScreen(),
+            '/dashboard': (_) => const DashboardScreen(),
+          },
+        );
       },
     );
   }

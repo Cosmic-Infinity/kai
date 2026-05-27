@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![MQTT](https://img.shields.io/badge/MQTT-Mosquitto-orange.svg)](https://mosquitto.org/)
 [![YOLOv11](https://img.shields.io/badge/YOLOv11-Computer%20Vision-green.svg)](https://github.com/ultralytics/ultralytics)
-[![Kivy](https://img.shields.io/badge/UI-Kivy-purple.svg)](https://kivy.org/)
+[![Flutter](https://img.shields.io/badge/UI-Flutter-blue.svg)](https://flutter.dev/)
 
 ---
 
@@ -17,7 +17,7 @@ KAI is an IoT system designed for large organizations to save energy by automati
 
 **Automated Power Management** - Turns off appliances after detecting 300s (configurable) of no human presence.
 **Computer Vision** - YOLOv11-based person detection from camera feeds  
-**Near Real-time Dashboard** - Kivy UI showing live camera status and manual controls.
+**Near Real-time Dashboard** - Flutter UI (Android/Windows) showing live camera status and manual controls.
 **MQTT Architecture** - Scalable, real-time messaging with Eclipse Mosquitto  
 **One-Command Launch** - Start entire system with `python start.py`
 
@@ -32,7 +32,7 @@ KAI is an IoT system designed for large organizations to save energy by automati
                │                  │                │
        ┌───────▼────────┐  ┌─────▼──────┐  ┌──────▼────────┐
        │ Image Server   │  │  Control    │  │   Dashboard   │
-       │ (YOLOv11)      │  │  Server     │  │   (Kivy UI)   │
+       │ (YOLOv11)      │  │  Server     │  │ (Flutter UI)  │
        │                │  │             │  │               │
        │ • Detects      │  │ • Monitors  │  │ • Shows feeds │
        │   persons      │  │   status    │  │ • Force update│
@@ -90,7 +90,7 @@ This launches all modules in separate windows:
 
 - Image Server (processes camera feeds)
 - Control Server (manages power)
-- Dashboard UI (Kivy interface)
+- Dashboard UI (Flutter Desktop/Mobile via API)
 - MQTT Monitor (traffic viewer)
 
 **Manual Launch:**
@@ -102,8 +102,9 @@ python modules/image_server.py
 # Terminal 2 - Control Server
 python modules/control_server.py
 
-# Terminal 3 - Dashboard
-python main.py
+# Terminal 3 - Dashboard (Flutter)
+cd dashboard
+flutter run
 
 # Terminal 4 - Monitor (optional)
 python tools/monitor_mqtt.py
@@ -131,8 +132,7 @@ kai/
 │   ├── yolo11m.pt
 │   └── yolo11s.pt
 ├── modules/                 # Application core modules
-│   ├── ui.py                # Dashboard logic
-│   ├── ui.kv                # Dashboard layout specifications
+├── dashboard/               # Flutter Dashboard UI (Android/Windows)
 │   ├── feeds.py             # MQTT feed management
 │   ├── image_server.py      # Camera processing and YOLO detector
 │   ├── control_server.py    # Automatic appliance power control
@@ -142,8 +142,7 @@ kai/
 │   ├── test_mqtt.py         # Test broker connection
 │   ├── monitor_mqtt.py      # Print real-time MQTT message feeds
 │   └── finetune.py          # Fine-tuning utilities
-├── buildozer.spec           # Compilation parameters for Android
-├── main.py                  # Android application startup entry
+├── dashboard/               # Flutter Source code
 ├── mqtt_config.py           # Main broker configurations
 ├── requirements.txt         # Python dependencies
 ├── README.md                # System documentation
@@ -257,7 +256,8 @@ python modules/image_server.py
 python modules/control_server.py
 
 # Test UI
-python modules/ui.py
+cd dashboard
+flutter run
 ```
 
 ---
@@ -279,7 +279,7 @@ python modules/ui.py
 - **[YOLOv11](https://github.com/ultralytics/ultralytics)** - Computer vision
 - **[Eclipse Mosquitto](https://mosquitto.org/)** - MQTT broker
 - **[Paho MQTT](https://www.eclipse.org/paho/)** - MQTT client
-- **[Kivy](https://kivy.org/)** - Dashboard UI
+- **[Flutter](https://flutter.dev/)** - Dashboard UI
 - **[PyTorch](https://pytorch.org/)** - ML framework
 
 ---

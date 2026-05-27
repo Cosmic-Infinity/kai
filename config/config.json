@@ -4,19 +4,5 @@
     "CONTROL_SERVER_INTERVAL": 30,
     "INACTIVITY_THRESHOLD": 10,
     "MQTT_KEEPALIVE": 120,
-    "MQTT_RECONNECT_DELAY": 2,
-    "MQTT_BROKER_HOST": "127.0.0.1",
-    "MQTT_BROKER_PORT": 1883,
-    "MQTT_USERNAME": "kai_admin",
-    "MQTT_PASSWORD": "kai",
-    "API_KEY": "testtest",
-    "TOPIC_FORCE_REQUEST": "kai/force_request",
-    "TOPIC_FORCE_SERVED": "kai/force_served",
-    "TOPIC_CONTROL": "kai/control",
-    "TOPIC_POWER": "kai/power",
-    "MQTT_QOS": 1,
-    "MQTT_RETAIN": false,
-    "MQTT_MAX_RECONNECT_ATTEMPTS": 0,
-    "MQTT_CLIENT_ID_PREFIX": "kai",
-    "MQTT_DEBUG": false
+    "MQTT_RECONNECT_DELAY": 2
 }

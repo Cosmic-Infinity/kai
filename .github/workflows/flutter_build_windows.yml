@@ -1,0 +1,37 @@
+name: Flutter Build Windows
+
+on:
+  workflow_dispatch: # Manual trigger only
+
+jobs:
+  build-windows:
+    name: Build Windows App
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        working-directory: dashboard
+        run: flutter pub get
+
+      - name: Enable Windows Desktop
+        working-directory: dashboard
+        run: flutter config --enable-windows-desktop
+
+      - name: Build Windows
+        working-directory: dashboard
+        run: flutter build windows --release
+
+      - name: Upload Windows Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-app
+          path: dashboard/build/windows/x64/runner/Release/

@@ -72,8 +72,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   @override
-  Widget build(self_context) {
-    final isDark = Theme.of(self_context).brightness == Brightness.dark;
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9), // slate-900 / slate-100
@@ -104,13 +104,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       Icon(
                         Icons.settings_input_hdmi,
                         size: 48,
-                        color: Theme.of(self_context).colorScheme.primary,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                       const SizedBox(height: 16),
                       Text(
                         'KAI Dashboard',
                         textAlign: TextAlign.center,
-                        style: Theme.of(self_context).textTheme.headlineMedium?.copyWith(
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A),
                             ),
@@ -187,9 +187,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.redAccent.withOpacity(0.1),
+                            color: Colors.redAccent.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
                           ),
                           child: Text(
                             _errorMessage!,

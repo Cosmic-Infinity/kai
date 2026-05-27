@@ -1,6 +1,18 @@
-human-detection-in-classroom/
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+.env
+
+# Project specific
+human-detection-in-classroom/
 images_ready/
+images_src/
 .buildozer/
 bin/
 *.apk
+screenshots/
+
+# IDEs
+.vscode/
+.idea/

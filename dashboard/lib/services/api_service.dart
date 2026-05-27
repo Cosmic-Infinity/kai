@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/camera.dart';
 
@@ -25,7 +26,7 @@ class ApiService {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
     } catch (e) {
-      print('[ApiService] fetchConfig error: $e');
+      debugPrint('[ApiService] fetchConfig error: $e');
     }
     return null;
   }
@@ -52,7 +53,7 @@ class ApiService {
         });
       }
     } catch (e) {
-      print('[ApiService] fetchCameras error: $e');
+      debugPrint('[ApiService] fetchCameras error: $e');
     }
     return null;
   }
@@ -67,7 +68,7 @@ class ApiService {
       );
       return response.statusCode == 200;
     } catch (e) {
-      print('[ApiService] saveConfig error: $e');
+      debugPrint('[ApiService] saveConfig error: $e');
       return false;
     }
   }

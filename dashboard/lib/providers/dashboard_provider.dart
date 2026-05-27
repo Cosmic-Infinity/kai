@@ -126,7 +126,7 @@ class DashboardProvider with ChangeNotifier {
       if (!msg.startsWith('FORCE_SERVED_')) return;
       final camId = msg.substring('FORCE_SERVED_'.length);
       if (_pendingForceUpdates.remove(camId)) {
-        print('[DashboardProvider] Force update served for $camId');
+        debugPrint('[DashboardProvider] Force update served for $camId');
         loadCameras(updatedCams: {camId});
       }
     };
@@ -241,7 +241,7 @@ class DashboardProvider with ChangeNotifier {
 
     Timer(const Duration(seconds: 12), () {
       if (_pendingForceUpdates.remove(cameraId)) {
-        print('[DashboardProvider] Force update timed out for $cameraId');
+        debugPrint('[DashboardProvider] Force update timed out for $cameraId');
         notifyListeners();
       }
     });
@@ -264,7 +264,7 @@ class DashboardProvider with ChangeNotifier {
     remainingSecondsNotifier.value = remainingSeconds;
     loadCameras(); // async, will notifyListeners on completion
     if (!_isMqttConnected) {
-      print('[DashboardProvider] Manual refresh — MQTT offline, reconnecting...');
+      debugPrint('[DashboardProvider] Manual refresh — MQTT offline, reconnecting...');
       startDashboard();
     }
   }

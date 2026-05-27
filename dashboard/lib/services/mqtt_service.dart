@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
 
@@ -51,7 +52,7 @@ class MqttService {
     try {
       await _client!.connect();
     } catch (e) {
-      print('[MqttService] Connection failed: $e');
+      debugPrint('[MqttService] Connection failed: $e');
       _safeDisconnect();
       return false;
     }
@@ -61,7 +62,7 @@ class MqttService {
       _subscribeToTopics();
       return true;
     } else {
-      print('[MqttService] Connection failed - status: ${_client!.connectionStatus}');
+      debugPrint('[MqttService] Connection failed - status: ${_client!.connectionStatus}');
       _safeDisconnect();
       return false;
     }
@@ -79,12 +80,12 @@ class MqttService {
   }
 
   void _onConnected() {
-    print('[MqttService] Connected');
+    debugPrint('[MqttService] Connected');
     onConnectedCallback?.call();
   }
 
   void _onDisconnected() {
-    print('[MqttService] Disconnected');
+    debugPrint('[MqttService] Disconnected');
     onDisconnectedCallback?.call();
   }
 
@@ -109,7 +110,7 @@ class MqttService {
       onError: (Object error) {
         // Socket may die silently when app is backgrounded on Android.
         // The lifecycle observer will force-reconnect on resume, so just log here.
-        print('[MqttService] Stream error (socket likely dead): $error');
+        debugPrint('[MqttService] Stream error (socket likely dead): $error');
       },
       cancelOnError: false,
     );
@@ -120,7 +121,7 @@ class MqttService {
     if (!isConnected || _client == null) return;
     final builder = MqttClientPayloadBuilder()..addString('FORCE_UPDATE_$cameraId');
     _client!.publishMessage(topicForceRequest, MqttQos.atLeastOnce, builder.payload!);
-    print('[MqttService] Force update request → $cameraId');
+    debugPrint('[MqttService] Force update request → $cameraId');
   }
 
   /// Publishes a power toggle command for a camera
@@ -128,6 +129,6 @@ class MqttService {
     if (!isConnected || _client == null) return;
     final builder = MqttClientPayloadBuilder()..addString('SET_${cameraId}_${state.toUpperCase()}');
     _client!.publishMessage(topicControl, MqttQos.atLeastOnce, builder.payload!);
-    print('[MqttService] Control command → SET_${cameraId}_$state');
+    debugPrint('[MqttService] Control command → SET_${cameraId}_$state');
   }
 }

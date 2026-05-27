@@ -89,12 +89,11 @@ class CameraCard extends StatelessWidget {
         : 'UNKNOWN';
 
     return Card(
-      color: isDark ? const Color(0xFF1E293B) : Colors.white,
       elevation: isDark ? 6 : 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+          color: Theme.of(context).colorScheme.outlineVariant,
         ),
       ),
       clipBehavior: Clip.antiAlias,

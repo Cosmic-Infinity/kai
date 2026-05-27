@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/camera.dart';
@@ -48,13 +49,30 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
   void _zoomTo(double newZoom) {
     if (_viewportSize == Size.zero) return;
     setState(() {
+      final double oldZoom = _transformationController.value.getMaxScaleOnAxis();
       _zoomLevel = newZoom.clamp(1.0, 8.0);
-      final double cx = _viewportSize.width / 2;
-      final double cy = _viewportSize.height / 2;
+      
+      if (_zoomLevel == 1.0) {
+        _transformationController.value = Matrix4.identity();
+        return;
+      }
+
+      final double fx = _viewportSize.width / 2;
+      final double fy = _viewportSize.height / 2;
+      
+      final Matrix4 currentMatrix = _transformationController.value;
+      final double txOld = currentMatrix.storage[12];
+      final double tyOld = currentMatrix.storage[13];
+      
+      final double scaleRatio = _zoomLevel / oldZoom;
+      final double txNew = fx - (fx - txOld) * scaleRatio;
+      final double tyNew = fy - (fy - tyOld) * scaleRatio;
+      
       _transformationController.value = Matrix4.identity()
-        ..translate(cx, cy, 0.0)
-        ..scale(_zoomLevel)
-        ..translate(-cx, -cy, 0.0);
+        ..setEntry(0, 0, _zoomLevel)
+        ..setEntry(1, 1, _zoomLevel)
+        ..setEntry(0, 3, txNew)
+        ..setEntry(1, 3, tyNew);
     });
   }
 
@@ -168,6 +186,7 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
                               imageUrl: currentCamera.imagePath,
                               bboxes: currentCamera.boundingBoxes,
                               showBboxes: _showBboxes,
+                              zoomLevel: _zoomLevel,
                             ),
                           ),
 
@@ -435,11 +454,25 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
 /// Custom Canvas Painter to draw dynamic bounding boxes and badges on top of the image
 class BBoxPainter extends CustomPainter {
   final List<BoundingBox> bboxes;
+  final double zoomLevel;
 
-  BBoxPainter({required this.bboxes});
+  BBoxPainter({required this.bboxes, required this.zoomLevel});
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Dynamic math based on zoomLevel to calculate visually clamped physical dimensions
+    final double physicalStrokeWidth = (2.5 * math.sqrt(zoomLevel)).clamp(2.5, 4.0);
+    final double strokeWidth = physicalStrokeWidth / zoomLevel;
+
+    final double physicalFontSize = (10.0 * math.sqrt(zoomLevel)).clamp(10.0, 15.0);
+    final double fontSize = physicalFontSize / zoomLevel;
+
+    final double physicalBorderStroke = (1.0 * math.sqrt(zoomLevel)).clamp(1.0, 1.8);
+    final double borderStrokeWidth = physicalBorderStroke / zoomLevel;
+
+    final double paddingX = 4.0 / zoomLevel;
+    final double paddingY = 2.0 / zoomLevel;
+
     for (var bbox in bboxes) {
       // Parse Color Hex (e.g. #ff0000)
       Color color = Colors.red;
@@ -461,7 +494,7 @@ class BBoxPainter extends CustomPainter {
       final paint = Paint()
         ..color = color
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5;
+        ..strokeWidth = strokeWidth;
 
       final rect = Rect.fromLTWH(left, top, width, height);
       canvas.drawRect(rect, paint);
@@ -469,9 +502,9 @@ class BBoxPainter extends CustomPainter {
       // Draw dynamic label badge
       final textSpan = TextSpan(
         text: ' ${bbox.label} ',
-        style: const TextStyle(
+        style: TextStyle(
           color: Colors.white,
-          fontSize: 10,
+          fontSize: fontSize,
           fontWeight: FontWeight.bold,
         ),
       );
@@ -481,8 +514,8 @@ class BBoxPainter extends CustomPainter {
       );
       textPainter.layout();
 
-      final badgeHeight = textPainter.height + 4;
-      final badgeWidth = textPainter.width + 8;
+      final badgeHeight = textPainter.height + 2 * paddingY;
+      final badgeWidth = textPainter.width + 2 * paddingX;
       // Position at top of rect
       double badgeY = top;
       if (badgeY - badgeHeight < 0) {
@@ -497,19 +530,19 @@ class BBoxPainter extends CustomPainter {
       final borderPaint = Paint()
         ..color = color
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.0;
+        ..strokeWidth = borderStrokeWidth;
 
       canvas.drawRect(badgeRect, bgPaint);
       canvas.drawRect(badgeRect, borderPaint);
 
       // Render the Text label
-      textPainter.paint(canvas, Offset(left + 4, badgeY + 2));
+      textPainter.paint(canvas, Offset(left + paddingX, badgeY + paddingY));
     }
   }
 
   @override
   bool shouldRepaint(covariant BBoxPainter oldDelegate) {
-    return oldDelegate.bboxes != bboxes;
+    return oldDelegate.bboxes != bboxes || oldDelegate.zoomLevel != zoomLevel;
   }
 }
 
@@ -518,11 +551,13 @@ class _BBoxImagePreview extends StatefulWidget {
   final String imageUrl;
   final List<BoundingBox> bboxes;
   final bool showBboxes;
+  final double zoomLevel;
 
   const _BBoxImagePreview({
     required this.imageUrl,
     required this.bboxes,
     required this.showBboxes,
+    required this.zoomLevel,
   });
 
   @override
@@ -646,6 +681,7 @@ class _BBoxImagePreviewState extends State<_BBoxImagePreview> {
                 child: CustomPaint(
                   painter: BBoxPainter(
                     bboxes: widget.bboxes,
+                    zoomLevel: widget.zoomLevel,
                   ),
                 ),
               ),

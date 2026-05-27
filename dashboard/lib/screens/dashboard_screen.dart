@@ -37,7 +37,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       // Always force reconnect on resume. The TCP socket dies silently when
       // the app is backgrounded on Android, but the MQTT client may still
       // report isConnected=true until the keepalive timeout fires.
-      print('[DashboardScreen] App resumed. Forcing MQTT reconnect...');
+      debugPrint('[DashboardScreen] App resumed. Forcing MQTT reconnect...');
       Provider.of<DashboardProvider>(context, listen: false).startDashboard();
     }
   }
@@ -51,7 +51,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     final currentConfig = await provider.fetchSystemConfig();
 
     if (currentConfig == null) {
-      if (mounted) {
+      if (context.mounted) {
         scaffoldMessenger.showSnackBar(
           const SnackBar(
             content: Text('Failed to load system settings from server'),
@@ -61,7 +61,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       return;
     }
 
-    if (!mounted) return;
+    if (!context.mounted) return;
 
     showDialog(
       context: context,
@@ -88,46 +88,52 @@ class _DashboardScreenState extends State<DashboardScreen>
             'Select Theme Mode',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              RadioListTile<ThemeMode>(
-                title: const Text('System Default (Auto)'),
-                value: ThemeMode.system,
-                groupValue: provider.themeMode,
-                activeColor: Theme.of(context).colorScheme.primary,
-                onChanged: (mode) {
-                  if (mode != null) {
-                    provider.setThemeMode(mode);
+          content: RadioGroup<ThemeMode>(
+            groupValue: provider.themeMode,
+            onChanged: (mode) {
+              if (mode != null) {
+                provider.setThemeMode(mode);
+                Navigator.of(dialogContext).pop();
+              }
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  title: const Text('System Default (Auto)'),
+                  leading: Radio<ThemeMode>(
+                    value: ThemeMode.system,
+                    activeColor: Theme.of(context).colorScheme.primary,
+                  ),
+                  onTap: () {
+                    provider.setThemeMode(ThemeMode.system);
                     Navigator.of(dialogContext).pop();
-                  }
-                },
-              ),
-              RadioListTile<ThemeMode>(
-                title: const Text('Light Mode'),
-                value: ThemeMode.light,
-                groupValue: provider.themeMode,
-                activeColor: Theme.of(context).colorScheme.primary,
-                onChanged: (mode) {
-                  if (mode != null) {
-                    provider.setThemeMode(mode);
+                  },
+                ),
+                ListTile(
+                  title: const Text('Light Mode'),
+                  leading: Radio<ThemeMode>(
+                    value: ThemeMode.light,
+                    activeColor: Theme.of(context).colorScheme.primary,
+                  ),
+                  onTap: () {
+                    provider.setThemeMode(ThemeMode.light);
                     Navigator.of(dialogContext).pop();
-                  }
-                },
-              ),
-              RadioListTile<ThemeMode>(
-                title: const Text('Dark Mode'),
-                value: ThemeMode.dark,
-                groupValue: provider.themeMode,
-                activeColor: Theme.of(context).colorScheme.primary,
-                onChanged: (mode) {
-                  if (mode != null) {
-                    provider.setThemeMode(mode);
+                  },
+                ),
+                ListTile(
+                  title: const Text('Dark Mode'),
+                  leading: Radio<ThemeMode>(
+                    value: ThemeMode.dark,
+                    activeColor: Theme.of(context).colorScheme.primary,
+                  ),
+                  onTap: () {
+                    provider.setThemeMode(ThemeMode.dark);
                     Navigator.of(dialogContext).pop();
-                  }
-                },
-              ),
-            ],
+                  },
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -154,13 +160,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     int columns = colsToUse.clamp(1, maxCols);
 
     return Scaffold(
-      backgroundColor: isDark
-          ? const Color(0xFF0B0F19)
-          : const Color(0xFFF3F4F6), // Deep Cosmic Space / Light Grey
       appBar: AppBar(
-        backgroundColor: isDark
-            ? const Color(0xFF161E2E)
-            : Colors.white, // Sleek Navy / White
         title: Row(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -352,134 +352,182 @@ class _DashboardScreenState extends State<DashboardScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF161E2E) : Colors.white,
+              color: Theme.of(context).colorScheme.surfaceContainer,
               border: Border(
                 bottom: BorderSide(
-                  color: isDark
-                      ? const Color(0xFF222F43)
-                      : const Color(0xFFCBD5E1),
+                  color: Theme.of(context).colorScheme.outlineVariant,
                 ),
               ),
             ),
             child: Row(
               children: [
                 // Filter dropdown with Multi-select checkable options
-                MenuAnchor(
-                  consumeOutsideTap: true,
-                  style: MenuStyle(
-                    backgroundColor: WidgetStateProperty.all(
-                      isDark ? const Color(0xFF161E2E) : Colors.white,
-                    ),
-                    elevation: WidgetStateProperty.all(8),
-                    shape: WidgetStateProperty.all(
-                      RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(
-                          color: isDark
-                              ? const Color(0xFF222F43)
-                              : const Color(0xFFCBD5E1),
-                        ),
-                      ),
+                PopupMenuButton<void>(
+                  tooltip: 'Show filters',
+                  elevation: 8,
+                  offset: const Offset(0, 48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant,
                     ),
                   ),
-                  builder: (context, controller, child) {
-                    final bool isNarrow = screenWidth < 550;
-                    final activeFiltersCount = provider.selectedFilters.length;
-                    final filterButtonLabel = isNarrow
-                        ? (activeFiltersCount == 0
-                              ? 'Filter'
-                              : 'Filter ($activeFiltersCount)')
-                        : 'Filter: ${provider.filterLabel}';
-
-                    return InkWell(
-                      onTap: () {
-                        if (controller.isOpen) {
-                          controller.close();
-                        } else {
-                          controller.open();
-                        }
-                      },
+                  color: Theme.of(context).colorScheme.surfaceContainer,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: provider.selectedFilters.isNotEmpty
+                          ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.15)
+                          : (isDark
+                                ? const Color(0xFF222F43)
+                                : const Color(0xFFF1F5F9)),
                       borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
+                      border: Border.all(
+                        color: provider.selectedFilters.isNotEmpty
+                            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)
+                            : (isDark
+                                  ? const Color(0xFF37465F)
+                                  : const Color(0xFFCBD5E1)),
+                        width: provider.selectedFilters.isNotEmpty
+                            ? 1.5
+                            : 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.filter_alt_outlined,
+                          size: 16,
                           color: provider.selectedFilters.isNotEmpty
-                              ? Theme.of(
-                                  context,
-                                ).colorScheme.primary.withValues(alpha: 0.15)
+                              ? Theme.of(context).colorScheme.primary
                               : (isDark
-                                    ? const Color(0xFF222F43)
-                                    : const Color(0xFFF1F5F9)),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
+                                    ? const Color(0xFF9CA3AF)
+                                    : const Color(0xFF37465F)),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          screenWidth < 550
+                              ? (provider.selectedFilters.isEmpty
+                                  ? 'Filter'
+                                  : 'Filter (${provider.selectedFilters.length})')
+                              : 'Filter: ${provider.filterLabel}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
                             color: provider.selectedFilters.isNotEmpty
-                                ? Theme.of(
-                                    context,
-                                  ).colorScheme.primary.withValues(alpha: 0.5)
-                                : (isDark
-                                      ? const Color(0xFF37465F)
-                                      : const Color(0xFFCBD5E1)),
-                            width: provider.selectedFilters.isNotEmpty
-                                ? 1.5
-                                : 1,
+                                ? Theme.of(context).colorScheme.primary
+                                : (isDark ? Colors.white : Colors.black87),
                           ),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.filter_alt_outlined,
-                              size: 16,
-                              color: provider.selectedFilters.isNotEmpty
-                                  ? Theme.of(context).colorScheme.primary
-                                  : (isDark
-                                        ? const Color(0xFF9CA3AF)
-                                        : const Color(0xFF37465F)),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              filterButtonLabel,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: provider.selectedFilters.isNotEmpty
-                                    ? Theme.of(context).colorScheme.primary
-                                    : (isDark ? Colors.white : Colors.black87),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Icon(
-                              Icons.arrow_drop_down,
-                              size: 16,
-                              color: provider.selectedFilters.isNotEmpty
-                                  ? Theme.of(context).colorScheme.primary
-                                  : (isDark ? Colors.white70 : Colors.black54),
-                            ),
-                          ],
+                        const SizedBox(width: 6),
+                        Icon(
+                          Icons.arrow_drop_down,
+                          size: 16,
+                          color: provider.selectedFilters.isNotEmpty
+                              ? Theme.of(context).colorScheme.primary
+                              : (isDark ? Colors.white70 : Colors.black54),
                         ),
-                      ),
-                    );
-                  },
-                  menuChildren: [
-                    Consumer<DashboardProvider>(
-                      builder: (context, menuProvider, _) {
-                        final activeFilters = menuProvider.selectedFilters;
-                        return Container(
-                          width: 280,
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
+                      ],
+                    ),
+                  ),
+                  itemBuilder: (context) {
+                    return [
+                      _FilterMenuEntry(
+                        child: Consumer<DashboardProvider>(
+                          builder: (context, menuProvider, _) {
+                            final activeFilters = menuProvider.selectedFilters;
+                            return Container(
+                              width: 280,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'OCCUPANCY STATUS',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                          color: isDark
+                                              ? const Color(0xFF94A3B8)
+                                              : const Color(0xFF475569),
+                                        ),
+                                      ),
+                                      if (activeFilters.isNotEmpty)
+                                        TextButton.icon(
+                                          onPressed: () =>
+                                              menuProvider.clearFilters(),
+                                          icon: const Icon(
+                                            Icons.clear_all,
+                                            size: 14,
+                                          ),
+                                          label: const Text(
+                                            'Reset',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          style: TextButton.styleFrom(
+                                            foregroundColor: Colors.redAccent,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize:
+                                                MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  CheckboxListTile(
+                                    title: const Text(
+                                      'Occupied',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
+                                    value: activeFilters.contains('Occupied'),
+                                    dense: true,
+                                    controlAffinity:
+                                        ListTileControlAffinity.leading,
+                                    activeColor: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                    contentPadding: EdgeInsets.zero,
+                                    onChanged: (val) {
+                                      menuProvider.toggleFilter('Occupied');
+                                    },
+                                  ),
+                                  CheckboxListTile(
+                                    title: const Text(
+                                      'Empty',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
+                                    value: activeFilters.contains('Empty'),
+                                    dense: true,
+                                    controlAffinity:
+                                        ListTileControlAffinity.leading,
+                                    activeColor: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                    contentPadding: EdgeInsets.zero,
+                                    onChanged: (val) {
+                                      menuProvider.toggleFilter('Empty');
+                                    },
+                                  ),
+                                  const Divider(height: 16),
                                   Text(
-                                    'OCCUPANCY STATUS',
+                                    'POWER STATE',
                                     style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
@@ -489,181 +537,108 @@ class _DashboardScreenState extends State<DashboardScreen>
                                           : const Color(0xFF475569),
                                     ),
                                   ),
-                                  if (activeFilters.isNotEmpty)
-                                    TextButton.icon(
-                                      onPressed: () =>
-                                          menuProvider.clearFilters(),
-                                      icon: const Icon(
-                                        Icons.clear_all,
-                                        size: 14,
-                                      ),
-                                      label: const Text(
-                                        'Reset',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
+                                  const SizedBox(height: 4),
+                                  CheckboxListTile(
+                                    title: const Text(
+                                      'Power ON',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
+                                    value: activeFilters.contains('Power ON'),
+                                    dense: true,
+                                    controlAffinity:
+                                        ListTileControlAffinity.leading,
+                                    activeColor: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                    contentPadding: EdgeInsets.zero,
+                                    onChanged: (val) {
+                                      menuProvider.toggleFilter('Power ON');
+                                    },
+                                  ),
+                                  CheckboxListTile(
+                                    title: const Text(
+                                      'Power OFF',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
+                                    value: activeFilters.contains('Power OFF'),
+                                    dense: true,
+                                    controlAffinity:
+                                        ListTileControlAffinity.leading,
+                                    activeColor: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                    contentPadding: EdgeInsets.zero,
+                                    onChanged: (val) {
+                                      menuProvider.toggleFilter('Power OFF');
+                                    },
+                                  ),
+                                  const Divider(height: 16),
+                                  Text(
+                                    'QUICK PRESETS',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                      color: isDark
+                                          ? const Color(0xFF94A3B8)
+                                          : const Color(0xFF475569),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: [
+                                      ActionChip(
+                                        avatar: const Icon(
+                                          Icons.flash_on,
+                                          size: 12,
+                                          color: Colors.green,
                                         ),
-                                      ),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: Colors.redAccent,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
+                                        label: const Text(
+                                          'Occupied & ON',
+                                          style: TextStyle(fontSize: 10),
                                         ),
-                                        minimumSize: Size.zero,
-                                        tapTargetSize:
+                                        padding: EdgeInsets.zero,
+                                        materialTapTargetSize:
                                             MaterialTapTargetSize.shrinkWrap,
+                                        onPressed: () {
+                                          menuProvider.setQuickFilter([
+                                            'Occupied',
+                                            'Power ON',
+                                          ]);
+                                        },
                                       ),
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              CheckboxListTile(
-                                title: const Text(
-                                  'Occupied',
-                                  style: TextStyle(fontSize: 13),
-                                ),
-                                value: activeFilters.contains('Occupied'),
-                                dense: true,
-                                controlAffinity:
-                                    ListTileControlAffinity.leading,
-                                activeColor: Theme.of(
-                                  context,
-                                ).colorScheme.primary,
-                                contentPadding: EdgeInsets.zero,
-                                onChanged: (val) {
-                                  menuProvider.toggleFilter('Occupied');
-                                },
-                              ),
-                              CheckboxListTile(
-                                title: const Text(
-                                  'Empty',
-                                  style: TextStyle(fontSize: 13),
-                                ),
-                                value: activeFilters.contains('Empty'),
-                                dense: true,
-                                controlAffinity:
-                                    ListTileControlAffinity.leading,
-                                activeColor: Theme.of(
-                                  context,
-                                ).colorScheme.primary,
-                                contentPadding: EdgeInsets.zero,
-                                onChanged: (val) {
-                                  menuProvider.toggleFilter('Empty');
-                                },
-                              ),
-                              const Divider(height: 16),
-                              Text(
-                                'POWER STATE',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
-                                  color: isDark
-                                      ? const Color(0xFF94A3B8)
-                                      : const Color(0xFF475569),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              CheckboxListTile(
-                                title: const Text(
-                                  'Power ON',
-                                  style: TextStyle(fontSize: 13),
-                                ),
-                                value: activeFilters.contains('Power ON'),
-                                dense: true,
-                                controlAffinity:
-                                    ListTileControlAffinity.leading,
-                                activeColor: Theme.of(
-                                  context,
-                                ).colorScheme.primary,
-                                contentPadding: EdgeInsets.zero,
-                                onChanged: (val) {
-                                  menuProvider.toggleFilter('Power ON');
-                                },
-                              ),
-                              CheckboxListTile(
-                                title: const Text(
-                                  'Power OFF',
-                                  style: TextStyle(fontSize: 13),
-                                ),
-                                value: activeFilters.contains('Power OFF'),
-                                dense: true,
-                                controlAffinity:
-                                    ListTileControlAffinity.leading,
-                                activeColor: Theme.of(
-                                  context,
-                                ).colorScheme.primary,
-                                contentPadding: EdgeInsets.zero,
-                                onChanged: (val) {
-                                  menuProvider.toggleFilter('Power OFF');
-                                },
-                              ),
-                              const Divider(height: 16),
-                              Text(
-                                'QUICK PRESETS',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
-                                  color: isDark
-                                      ? const Color(0xFF94A3B8)
-                                      : const Color(0xFF475569),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: [
-                                  ActionChip(
-                                    avatar: const Icon(
-                                      Icons.flash_on,
-                                      size: 12,
-                                      color: Colors.green,
-                                    ),
-                                    label: const Text(
-                                      'Occupied & ON',
-                                      style: TextStyle(fontSize: 10),
-                                    ),
-                                    padding: EdgeInsets.zero,
-                                    materialTapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                    onPressed: () {
-                                      menuProvider.setQuickFilter([
-                                        'Occupied',
-                                        'Power ON',
-                                      ]);
-                                    },
-                                  ),
-                                  ActionChip(
-                                    avatar: const Icon(
-                                      Icons.hotel,
-                                      size: 12,
-                                      color: Colors.amber,
-                                    ),
-                                    label: const Text(
-                                      'Empty & OFF',
-                                      style: TextStyle(fontSize: 10),
-                                    ),
-                                    padding: EdgeInsets.zero,
-                                    materialTapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                    onPressed: () {
-                                      menuProvider.setQuickFilter([
-                                        'Empty',
-                                        'Power OFF',
-                                      ]);
-                                    },
+                                      ActionChip(
+                                        avatar: const Icon(
+                                          Icons.hotel,
+                                          size: 12,
+                                          color: Colors.amber,
+                                        ),
+                                        label: const Text(
+                                          'Empty & OFF',
+                                          style: TextStyle(fontSize: 10),
+                                        ),
+                                        padding: EdgeInsets.zero,
+                                        materialTapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                        onPressed: () {
+                                          menuProvider.setQuickFilter([
+                                            'Empty',
+                                            'Power OFF',
+                                          ]);
+                                        },
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ],
+                            );
+                          },
+                        ),
+                      )
+                    ];
+                  },
                 ),
                 const SizedBox(width: 12),
 
@@ -916,10 +891,9 @@ class _SettingsDialog extends StatefulWidget {
   final DashboardProvider provider;
 
   const _SettingsDialog({
-    Key? key,
     required this.currentConfig,
     required this.provider,
-  }) : super(key: key);
+  });
 
   @override
   State<_SettingsDialog> createState() => _SettingsDialogState();
@@ -1191,5 +1165,28 @@ class _SettingsDialogState extends State<_SettingsDialog> {
         ),
       ],
     );
+  }
+}
+
+/// Custom PopupMenuEntry designed to render the dynamic multi-select filters panel
+/// without automatically triggering tap dismissal on tap.
+class _FilterMenuEntry extends PopupMenuEntry<void> {
+  final Widget child;
+  const _FilterMenuEntry({required this.child});
+
+  @override
+  double get height => 380;
+
+  @override
+  bool represents(void value) => false;
+
+  @override
+  State<_FilterMenuEntry> createState() => _FilterMenuEntryState();
+}
+
+class _FilterMenuEntryState extends State<_FilterMenuEntry> {
+  @override
+  Widget build(BuildContext context) {
+    return widget.child;
   }
 }

@@ -272,8 +272,23 @@ def main():
     print(colored("Tip: Check the MQTT Monitor window to see real-time message traffic!", Colors.CYAN))
     print()
     
+    # Load config to check for DEV_MODE warning
+    from modules.config_manager import get_config_namespace
+    config = get_config_namespace()
+    is_dev_mode = getattr(config, "DEV_MODE", False)
+    
     # Keep this script running
     try:
+        if is_dev_mode:
+            print()
+            print(colored("┌────────────────────────────────────────────────────────────┐", Colors.RED + Colors.BOLD))
+            print(colored("│ WARNING: SYSTEM IS RUNNING IN AN UNSAFE / DEVELOPMENT MODE │", Colors.RED + Colors.BOLD))
+            print(colored("│ - Using shared kai_admin / legacy developer credentials.   │", Colors.RED))
+            print(colored("│ - MQTT feed privileges are NOT isolated.                   │", Colors.RED))
+            print(colored("│ Please run configure_kai.py to secure this deployment!     │", Colors.RED))
+            print(colored("└────────────────────────────────────────────────────────────┘", Colors.RED + Colors.BOLD))
+            print()
+            
         print(colored("Press Ctrl+C here to exit this launcher (modules will continue running)", Colors.YELLOW))
         while True:
             time.sleep(1)

@@ -306,6 +306,10 @@ def process_force_requests():
 
 def main():
     """Main loop for the image server."""
+    # Explicitly configure the module role for secure isolated authentication
+    from feeds import configure_role
+    configure_role("image_server")
+    
     print("Image Server started.")
     os.makedirs(IMAGE_SRC_DIR, exist_ok=True)
     os.makedirs(IMAGE_READY_DIR, exist_ok=True)

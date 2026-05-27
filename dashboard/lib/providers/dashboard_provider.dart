@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/camera.dart';
 import '../services/api_service.dart';
 import '../services/mqtt_service.dart';
 
 class DashboardProvider with ChangeNotifier {
+  final _secureStorage = const FlutterSecureStorage();
+  
   String _host = '';
   String _username = '';
   String _password = '';
@@ -57,11 +60,8 @@ class DashboardProvider with ChangeNotifier {
 
   /// Load persisted credentials and theme on app launch
   Future<void> initialize() async {
+    // Load UI layout and theme preferences from unencrypted SharedPreferences
     final prefs = await SharedPreferences.getInstance();
-    _host = prefs.getString('host') ?? '';
-    _username = prefs.getString('username') ?? '';
-    _password = prefs.getString('password') ?? '';
-    _apiKey = prefs.getString('apiKey') ?? '';
     final themeStr = prefs.getString('theme') ?? 'System';
     _themeMode = switch (themeStr) {
       'Light' => ThemeMode.light,
@@ -69,6 +69,13 @@ class DashboardProvider with ChangeNotifier {
       _ => ThemeMode.system,
     };
     _gridCols = prefs.getInt('gridCols') ?? 0;
+
+    // Load credentials securely using hardware/OS encrypted storage
+    _host = await _secureStorage.read(key: 'host') ?? '';
+    _username = await _secureStorage.read(key: 'username') ?? '';
+    _password = await _secureStorage.read(key: 'password') ?? '';
+    _apiKey = await _secureStorage.read(key: 'apiKey') ?? '';
+
     notifyListeners();
   }
 
@@ -85,11 +92,11 @@ class DashboardProvider with ChangeNotifier {
     _refreshInterval = config['DASHBOARD_INTERVAL'] as int? ?? 30;
     _apiService = api;
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('host', host);
-    await prefs.setString('username', username);
-    await prefs.setString('password', password);
-    await prefs.setString('apiKey', apiKey);
+    // Securely write credentials using native encryptors (DPAPI/Keystore)
+    await _secureStorage.write(key: 'host', value: host);
+    await _secureStorage.write(key: 'username', value: username);
+    await _secureStorage.write(key: 'password', value: password);
+    await _secureStorage.write(key: 'apiKey', value: apiKey);
 
     notifyListeners();
     return true;
@@ -182,11 +189,11 @@ class DashboardProvider with ChangeNotifier {
     _apiKey = '';
     _apiService = null;
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('host');
-    await prefs.remove('username');
-    await prefs.remove('password');
-    await prefs.remove('apiKey');
+    // Securely wipe all stored credentials from the encrypted vault
+    await _secureStorage.delete(key: 'host');
+    await _secureStorage.delete(key: 'username');
+    await _secureStorage.delete(key: 'password');
+    await _secureStorage.delete(key: 'apiKey');
     notifyListeners();
   }
 

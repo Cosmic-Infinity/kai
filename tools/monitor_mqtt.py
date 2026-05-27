@@ -113,9 +113,17 @@ def main():
     client.on_disconnect = on_disconnect
     client.on_message = on_message
     
-    # Set authentication if configured
-    if config.MQTT_USERNAME and config.MQTT_PASSWORD:
-        client.username_pw_set(config.MQTT_USERNAME, config.MQTT_PASSWORD)
+    # Set authentication based on dev mode or isolated monitor user
+    is_dev_mode = getattr(config, "DEV_MODE", False)
+    username = config.MQTT_USERNAME
+    password = config.MQTT_PASSWORD
+    
+    if not is_dev_mode:
+        username = getattr(config, "MQTT_USER_MONITOR", "kai_monitor")
+        password = getattr(config, "MQTT_PASSWORD_MONITOR", None) or password
+        
+    if username and password:
+        client.username_pw_set(username, password)
     
     try:
         # Connect to broker

@@ -122,6 +122,10 @@ def camera_monitoring_loop() -> None:
 
 def main() -> None:
     """Main entry point - starts both control and monitoring threads."""
+    # Explicitly configure the module role for secure isolated authentication
+    from feeds import configure_role
+    configure_role("control_server")
+    
     print("=" * 60)
     print("Control Server started.")
     print("=" * 60)

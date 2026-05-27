@@ -81,6 +81,7 @@ The system is designed around a decoupled, event-driven pattern mediated by the 
    * **Publishes to** `kai/force_request` when the user manually requests an immediate room check.
    * **Subscribes to** `kai/force_served` to know exactly when to pull the updated camera feed/image.
    * **Publishes to** `kai/control` for manual power overrides (`SET_CAM_<id>_ON` or `OFF`).
+   * **Secure Storage**: Persists authentication keys securely using hardware-backed and OS-level encrypted vaults (Windows Credential Manager / Android Keystore) rather than unencrypted registry files.
 
 3. **Control Server**
    * Automatically monitors camera presence statuses from the tagged images directory.
@@ -122,7 +123,7 @@ pip install -r requirements.txt
 
 # 4. Secure Mosquitto & Start Service
 # Run the interactive setup tool in an Administrator PowerShell (Windows):
-python tools/setup_mqtt_auth.py
+python configure_kai.py
 ```
 
 ### Run the System
@@ -184,13 +185,14 @@ kai/
 │   ├── image_server.py      # Camera processing and YOLO detector
 │   ├── control_server.py    # Automatic appliance power control
 │   └── http_api.py          # Frame transmission web server
+├── config/                  # Centralized system configurations
+│   └── config.json          # Single Source of Truth configuration file
 ├── dashboard/               # Flutter Source code (UI for Android/Windows)
 ├── tools/                   # Debugging and utility scripts
-│   ├── setup_mqtt_auth.py   # Interactive Mosquitto security setup
 │   ├── test_mqtt.py         # Test broker connection
 │   ├── monitor_mqtt.py      # Print real-time MQTT message feeds
+│   ├── security_stresstest.py # Run automated security audit and stress tests
 │   └── finetune.py          # Fine-tuning utilities
-├── mqtt_config.py           # Main broker configurations
 ├── requirements.txt         # Python dependencies
 ├── README.md                # System documentation
 ├── start.py                 # One-command system environment launcher
@@ -202,33 +204,38 @@ kai/
 
 ## Configuration
 
-### MQTT Broker (`mqtt_config.py`)
+### MQTT Broker & Access Control (ACL)
+
+The system automatically configures Mosquitto with granular, multi-user Access Control Lists (ACL) to strictly isolate system component privileges. During configuration, internal server accounts are provisioned with secure, randomly-generated credentials, while the dashboard username/password is set up interactively:
+
+*   **Dashboard User (`kai_dashboard` or custom)**: Used by the Flutter app. Has restricted `read` access for telemetry (`kai/power`, `kai/force_served`) and restricted `write` access for user actions (`kai/control`, `kai/force_request`).
+*   **Image Server User (`kai_image_server`)**: Has restricted `read` access for `kai/force_request` and `write` access for `kai/force_served`.
+*   **Control Server User (`kai_control_server`)**: Has restricted `read` access for `kai/control` and `write` access for `kai/power`.
+*   **Traffic Monitor User (`kai_monitor`)**: Full read-only access (`kai/#`) to safely trace and log system events.
+*   **Developer Mode Bypass**: Optionally enables a single shared developer credential (`kai_admin` / `kai_developer`) across all modules.
+
+To set up production credentials and generate these secure boundaries automatically, run:
+```bash
+python configure_kai.py
+```
 
 ```python
-# Broker settings
-MQTT_BROKER_HOST = "127.0.0.1"  # IP of your broker (use 127.0.0.1 for local)
-MQTT_BROKER_PORT = 1883         # Default MQTT port
-
-# Authentication (as required)
-MQTT_USERNAME = None            # Set as required
-MQTT_PASSWORD = None            # Set as required
-
-# Security (deployment)
-MQTT_USE_TLS = False            # Enable for encrypted connections
-MQTT_QOS = 1                    # Quality of Service (0, 1, or 2)
+# Broker settings (config/config.json)
+MQTT_BROKER_HOST = "127.0.0.1"
+MQTT_BROKER_PORT = 1883
 ```
 
 ### Image Server
 
-- **Capture Interval**: 60 seconds
+- **Capture Interval**: 60 seconds (default)
 - **Batch Processing**: 25 images at a time
 - **Model**: YOLOv11 (auto-detects fine-tuned version)
 
 ### Control Server
 
 - **Control Response**: ~100ms (instant)
-- **Status Monitoring**: Every 30 seconds
-- **Auto Power-Off**: 10 consecutive "NO" detections
+- **Status Monitoring**: Every 30 seconds (default)
+- **Auto Power-Off**: 10 consecutive "NO" detections (default)
 
 ### Dashboard
 
@@ -293,6 +300,17 @@ Shows color-coded messages:
 - **Control commands** (blue)
 - **Power commands** (red)
 
+### Automated Security & Privilege Auditing
+
+```bash
+python tools/security_stresstest.py
+```
+
+Runs a portable diagnostic test suite confirming strict privilege isolation limits:
+* **HTTP API Sanitization**: Verifies that anonymous queries are blocked, write calls are whitelisted/bounds-checked, and GET config payloads mask all administrative credentials and connection properties.
+* **MQTT Password Gatekeeper**: Stress-tests authentication, confirming that dictionary attacks or default logins are strictly rejected.
+* **Granular ACL Enforcement**: Simulates Dashboard role bypasses (unauthorized writes to `kai/power` or reads from `kai/control`) and wildcard sniffing attempts (`kai/#`) to confirm they are securely dropped and filtered.
+
 ### Test Individual Modules
 
 ```bash
@@ -316,7 +334,7 @@ flutter run
 | **"Connection refused"**  | Start Mosquitto: `net start mosquitto`    |
 | **"Import paho.mqtt"**    | Install: `pip install paho-mqtt`          |
 | **Images not processing** | Check `images_src/` has `CAM_*.jpg` files |
-| **Messages not received** | Verify topic names in `mqtt_config.py`    |
+| **Messages not received** | Verify topic names in `config/config.json` |
 
 ---
 

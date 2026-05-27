@@ -81,7 +81,25 @@ class KAIRequestHandler(SimpleHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            self.wfile.write(json.dumps(load_config()).encode('utf-8'))
+            
+            # Whitelist of client-safe configuration preferences (timers & layout)
+            ALLOWED_FIELDS = {
+                "IMAGE_SERVER_INTERVAL",
+                "DASHBOARD_INTERVAL",
+                "CONTROL_SERVER_INTERVAL",
+                "INACTIVITY_THRESHOLD",
+                "MQTT_KEEPALIVE",
+                "MQTT_RECONNECT_DELAY",
+                "MQTT_QOS",
+                "MQTT_RETAIN",
+                "MQTT_DEBUG"
+            }
+            
+            current_config = load_config()
+            # Only send client-safe keys over the network
+            filtered_config = {k: v for k, v in current_config.items() if k in ALLOWED_FIELDS}
+            self.wfile.write(json.dumps(filtered_config).encode('utf-8'))
+
         elif parsed.path.startswith("/images/"):
             super().do_GET()
         else:
@@ -104,10 +122,65 @@ class KAIRequestHandler(SimpleHTTPRequestHandler):
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
             try:
-                new_config = json.loads(post_data.decode('utf-8'))
-                logging.info(f"UI submitted new configuration via HTTP POST: {new_config}")
+                updates = json.loads(post_data.decode('utf-8'))
+                logging.info(f"UI submitted configuration updates via HTTP POST: {updates}")
+                
+                # Strict whitelist of modifiable keys, along with expected type and numeric range limits
+                ALLOWED_FIELDS = {
+                    "IMAGE_SERVER_INTERVAL": (int, 1, 3600),
+                    "DASHBOARD_INTERVAL": (int, 1, 3600),
+                    "CONTROL_SERVER_INTERVAL": (int, 1, 3600),
+                    "INACTIVITY_THRESHOLD": (int, 1, 3600),
+                    "MQTT_KEEPALIVE": (int, 5, 3600),
+                    "MQTT_RECONNECT_DELAY": (int, 1, 60),
+                    "MQTT_QOS": (int, 0, 2),
+                    "MQTT_RETAIN": (bool, None, None),
+                    "MQTT_DEBUG": (bool, None, None)
+                }
+                
+                current_config = load_config()
+                
+                # 1. Enforce strict parameter validation
+                for key, val in updates.items():
+                    if key not in ALLOWED_FIELDS:
+                        logging.warning(f"Rejection: Client attempted to modify protected or invalid key: {key}")
+                        self.send_response(400)
+                        self.send_header('Content-Type', 'application/json')
+                        self.send_header('Access-Control-Allow-Origin', '*')
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"error": f"Access Denied: Key '{key}' is protected or invalid."}).encode('utf-8'))
+                        return
+                        
+                    expected_type, min_val, max_val = ALLOWED_FIELDS[key]
+                    
+                    # Verify type of the parameter
+                    if not isinstance(val, expected_type) or isinstance(val, bool) != (expected_type is bool):
+                        logging.warning(f"Rejection: Client sent invalid type for key {key}. Expected {expected_type.__name__}, got {type(val).__name__}")
+                        self.send_response(400)
+                        self.send_header('Content-Type', 'application/json')
+                        self.send_header('Access-Control-Allow-Origin', '*')
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"error": f"Type Error: Key '{key}' expects a {expected_type.__name__}."}).encode('utf-8'))
+                        return
+                        
+                    # Verify numeric bounds if applicable
+                    if expected_type is int and min_val is not None:
+                        if val < min_val or val > max_val:
+                            logging.warning(f"Rejection: Client sent out-of-bounds value for key {key}: {val} (allowed range: {min_val}-{max_val})")
+                            self.send_response(400)
+                            self.send_header('Content-Type', 'application/json')
+                            self.send_header('Access-Control-Allow-Origin', '*')
+                            self.end_headers()
+                            self.wfile.write(json.dumps({"error": f"Bounds Error: Key '{key}' must be between {min_val} and {max_val}."}).encode('utf-8'))
+                            return
+                
+                # 2. Merge validated fields into the existing configuration securely (preserves secrets)
+                for key, val in updates.items():
+                    current_config[key] = val
+                    
                 from config_manager import save_config
-                save_config(new_config)
+                save_config(current_config)
+                
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
@@ -117,6 +190,7 @@ class KAIRequestHandler(SimpleHTTPRequestHandler):
                 self.send_error(400, f"Bad Request: {e}")
         else:
             self.send_error(404, "Not Found")
+
 
 def run_server():
     # Check for API key and log a warning if missing

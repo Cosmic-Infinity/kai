@@ -34,6 +34,8 @@ class MQTTFeedManager:
             return
             
         self._initialized = True
+        self.role: Optional[str] = None
+        self.current_username: Optional[str] = None
         self._client: Optional[mqtt.Client] = None
         self._connected = False
         self._message_queues: Dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
@@ -63,6 +65,12 @@ class MQTTFeedManager:
             config.MQTT_PASSWORD = password
             if self._client:
                 self._client.username_pw_set(username, password)
+                
+    def configure_role(self, role: str):
+        """Set the module role explicitly and reload isolated credentials."""
+        self.role = role
+        # Re-initialize the client with the role-specific credentials
+        self._initialize_client()
     
     def _initialize_client(self):
         """Initialize the MQTT client with configuration."""
@@ -88,9 +96,26 @@ class MQTTFeedManager:
         self._client.on_disconnect = self._on_disconnect
         self._client.on_message = self._on_message
         
-        # Set authentication if configured
-        if config.MQTT_USERNAME and config.MQTT_PASSWORD:
-            self._client.username_pw_set(config.MQTT_USERNAME, config.MQTT_PASSWORD)
+        # Resolve username/password dynamically based on explicitly set role to achieve strict isolation
+        username = config.MQTT_USERNAME
+        password = config.MQTT_PASSWORD
+        
+        # Check if DEV_MODE is active. If not, load isolated client credentials.
+        is_dev_mode = getattr(config, "DEV_MODE", False)
+        if not is_dev_mode and self.role:
+            if self.role == "image_server":
+                username = getattr(config, "MQTT_USER_IMAGE_SERVER", "kai_image_server")
+                password = getattr(config, "MQTT_PASSWORD_IMAGE_SERVER", None)
+            elif self.role == "control_server":
+                username = getattr(config, "MQTT_USER_CONTROL_SERVER", "kai_control_server")
+                password = getattr(config, "MQTT_PASSWORD_CONTROL_SERVER", None)
+            elif self.role == "monitor":
+                username = getattr(config, "MQTT_USER_MONITOR", "kai_monitor")
+                password = getattr(config, "MQTT_PASSWORD_MONITOR", None)
+                
+        self.current_username = username
+        if username and password:
+            self._client.username_pw_set(username, password)
         
         # Set TLS if configured
         if config.MQTT_USE_TLS:
@@ -148,7 +173,7 @@ class MQTTFeedManager:
                     
                     attempt += 1
                     if attempt == 1:
-                        auth_info = f"user={config.MQTT_USERNAME}" if config.MQTT_USERNAME else "no auth"
+                        auth_info = f"user={self.current_username}" if self.current_username else "no auth"
                         print(f"[MQTT] Connecting to broker at {config.MQTT_BROKER_HOST}:{config.MQTT_BROKER_PORT} ({auth_info})...")
                     else:
                         print(f"[MQTT] Reconnection attempt {attempt}...")
@@ -195,9 +220,22 @@ class MQTTFeedManager:
             print("[MQTT] Successfully connected to broker.")
             self._connected = True
             
-            # Subscribe to all topics we need to listen to
-            topics_to_subscribe = set(self._topic_map.values())
-            for topic in topics_to_subscribe:
+            # Resolve which topics this specific role needs to subscribe to
+            is_dev_mode = getattr(config, "DEV_MODE", False)
+            if is_dev_mode or not self.role:
+                # In Dev Mode or default, subscribe to all topics we listen to
+                topics = set(self._topic_map.values())
+            else:
+                if self.role == "image_server":
+                    topics = {config.TOPIC_FORCE_REQUEST}
+                elif self.role == "control_server":
+                    topics = {config.TOPIC_CONTROL}
+                elif self.role == "monitor":
+                    topics = set(self._topic_map.values())
+                else:
+                    topics = set(self._topic_map.values())
+            
+            for topic in topics:
                 client.subscribe(topic, qos=config.MQTT_QOS)
                 print(f"[MQTT] Subscribed to topic: {topic}")
         else:
@@ -383,3 +421,8 @@ def is_connected() -> bool:
 def disconnect() -> None:
     """Disconnect from MQTT broker."""
     _manager.disconnect()
+
+
+def configure_role(role: str) -> None:
+    """Explicitly configure the MQTT connection role for this module."""
+    _manager.configure_role(role)

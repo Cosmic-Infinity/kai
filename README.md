@@ -23,31 +23,78 @@ KAI is an IoT system designed for large organizations to save energy by automati
 
 ---
 
-## System Architecture
+The system is designed around a decoupled, event-driven pattern mediated by the **Mosquitto MQTT Broker** for low-latency control flow, combined with a **Shared File Cache (`images_ready/`)** and an **HTTP API Server** for high-bandwidth data retrieval (like camera feeds, configs, and YOLO bounding box outputs). 
+
+### Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      MQTT Broker (Mosquitto)                │
-└──────────────┬──────────────────┬────────────────┬──────────┘
-               │                  │                │
-       ┌───────▼────────┐  ┌─────▼──────┐  ┌──────▼────────┐
-       │ Image Server   │  │  Control    │  │   Dashboard   │
-       │ (YOLOv11)      │  │  Server     │  │ (Flutter UI)  │
-       │                │  │             │  │               │
-       │ • Detects      │  │ • Monitors  │  │ • Shows feeds │
-       │   persons      │  │   status    │  │ • Force update│
-       │ • Tags images  │  │ • Auto      │  │ • Manual      │
-       │ • Force update │  │   power-off │  │   control     │
-       └────────────────┘  └─────────────┘  └───────────────┘
-               │                  │                │
-               └──────────────────┼────────────────┘
-                                  │
-                           ┌──────▼────────┐
-                           │  Power Feed   │
-                           │  (Appliance   │
-                           │   Control)    │
-                           └───────────────┘
+                                 ┌───────────────────────┐
+                                 │     Image Server      │
+                                 │  (YOLOv11 Detector)   │
+                                 └────▲─────────────┬────┘
+                                      │             │
+                   kai/force_request  │             │ Writes processed images
+                   (Subscribe Feed)   │             │ and bounding boxes (.json)
+                                      │             ▼
+               ┌──────────────────────┴─────────────┴───────────────┐
+               │               MQTT Broker (Mosquitto)              │
+               └──────▲─────────────▼▲──────────────▼▲───────────┬──┘
+                      │             ││              ││           │
+    kai/force_request │             ││              ││           │ kai/power
+    (Publish)         │  kai/force_ ││ kai/control  ││ kai/power │ (Subscribe)
+                      │  served     ││ (Publish)    ││ (Publish) │
+                      │  (Subscribe)││              ││           │
+                      ▼             │▼              │▼           ▼
+               ┌──────┴─────────────┴┐ ┌────────────┴┴┐ ┌────────┴─────┐
+               │      Dashboard      │ │   Control    │ │  Power Feed  │
+               │    (Flutter UI)     │ │   Server     │ │ (Appliances) │
+               └──────────▲──────────┘ └──────┬───────┘ └──────────────┘
+                          │                   │
+                          │                   │ Reads camera occupancy
+                          │                   │ status directly from disk
+                          │                   ▼
+                          │         ┌─────────────────────────────────┐
+                          │         │          images_ready/          │
+                          │         │  (Shared Directory / Data Cache)│
+                          │         └────────────────▲────────────────┘
+                          │                          │
+                          │                          │ Reads images and
+                          │ HTTP REST Requests       │ bounding box metadata
+                          │ (Port 8000)              │
+                          ▼                          │
+               ┌─────────────────────────────────────┴────────────────┐
+               │                   HTTP API Server                    │
+               │       Serves camera metadata and static images       │
+               └──────────────────────────────────────────────────────┘
 ```
+
+### Component Roles & Feeds
+
+1. **Image Server (YOLOv11)**
+   * Captures and analyzes static frames from cameras to detect human presence.
+   * **Subscribes to** `kai/force_request` to run immediate YOLO detection on a requested camera.
+   * **Publishes to** `kai/force_served` once a force-requested check is processed and tagged in the filesystem.
+
+2. **Dashboard (Flutter UI)**
+   * Displays room occupancy status (indicated by Green/Red indicators based on YOLO image tags).
+   * **Fetches** camera list and streams the actual camera images over **HTTP** from the HTTP API Server.
+   * **Publishes to** `kai/force_request` when the user manually requests an immediate room check.
+   * **Subscribes to** `kai/force_served` to know exactly when to pull the updated camera feed/image.
+   * **Publishes to** `kai/control` for manual power overrides (`SET_CAM_<id>_ON` or `OFF`).
+
+3. **Control Server**
+   * Automatically monitors camera presence statuses from the tagged images directory.
+   * **Subscribes to** `kai/control` to receive manual power overrides from the Dashboard.
+   * **Publishes to** `kai/power` to toggle appliances (either via automated 10-consecutive "NO" detection timeout or manual overrides).
+
+4. **Power Feed (Appliances / Relays)**
+   * **Subscribes to** `kai/power` to toggle connected physical relays and appliances.
+
+5. **HTTP API Server (Port 8000)**
+   * Built on a lightweight HTTP protocol to decouple static resource retrieval from the real-time MQTT message bus.
+   * **Serves `/api/cameras`**: Exposes the discovery metadata, YOLO detection state, and bounding box coordinates for each camera.
+   * **Serves `/images/*`**: Streams the tagged JPEG images from the `images_ready/` directory directly to the UI.
+   * **Serves `/api/config`**: Allows reading and updating runtime configurations.
 
 ---
 
@@ -125,24 +172,24 @@ python tools/test_mqtt.py
 kai/
 ├── .github/                 # GitHub actions configurations
 │   └── workflows/
-│       └── build.yml        # Cloud APK compilation workflow
+│       ├── flutter_build_android.yml # Android APK compilation workflow
+│       └── flutter_build_windows.yml # Windows App compilation workflow
 ├── docs/                    # Technical specifications & documentation
 │   └── system.txt
 ├── models/                  # Object detection weights
 │   ├── yolo11m.pt
 │   └── yolo11s.pt
 ├── modules/                 # Application core modules
-├── dashboard/               # Flutter Dashboard UI (Android/Windows)
 │   ├── feeds.py             # MQTT feed management
 │   ├── image_server.py      # Camera processing and YOLO detector
 │   ├── control_server.py    # Automatic appliance power control
 │   └── http_api.py          # Frame transmission web server
+├── dashboard/               # Flutter Source code (UI for Android/Windows)
 ├── tools/                   # Debugging and utility scripts
 │   ├── setup_mqtt_auth.py   # Interactive Mosquitto security setup
 │   ├── test_mqtt.py         # Test broker connection
 │   ├── monitor_mqtt.py      # Print real-time MQTT message feeds
 │   └── finetune.py          # Fine-tuning utilities
-├── dashboard/               # Flutter Source code
 ├── mqtt_config.py           # Main broker configurations
 ├── requirements.txt         # Python dependencies
 ├── README.md                # System documentation

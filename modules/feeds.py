@@ -1,12 +1,4 @@
-"""MQTT-based feed system for the IoT Dashboard/Control System.
-
-This module provides MQTT publish/subscribe functionality with the same API
-as the original file-based system, allowing seamless transition from file stubs
-to a real MQTT broker.
-
-Each feed is now represented as an MQTT topic. The system uses a shared MQTT
-client with automatic reconnection and message queuing.
-"""
+"""MQTT-based feed system with automatic reconnection and message queuing."""
 
 from __future__ import annotations
 
@@ -20,15 +12,11 @@ import paho.mqtt.client as mqtt
 
 from config_manager import get_config_namespace
 config = get_config_namespace()
+from logger import kai_print as print
 
 
 class MQTTFeedManager:
-    """
-    Manages MQTT connections and message handling for the feed system.
-    
-    This class implements a singleton pattern to ensure all components
-    share the same MQTT connection and message queues.
-    """
+    """Singleton manager for MQTT connections and message handling."""
     
     _instance = None
     _lock = threading.Lock()

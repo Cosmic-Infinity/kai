@@ -450,12 +450,8 @@ class BBoxPainter extends CustomPainter {
         }
       } catch (_) {}
 
-      // Calculate pixel coordinates
-      // Since coordinates are fractional (0.0 -> 1.0), we scale them to size.
-      // The Python backend serves coordinates mapped to Kivy's bottom-left origin:
-      // fx = x1, fy = 1.0 - y2, fw = x2 - x1, fh = y2 - y1.
-      // In Flutter, the origin is top-left, so:
-      // left = fx, width = fw, height = fh, and top = 1.0 - (fy + fh).
+      // Scale fractional coordinates to pixel size.
+      // Map from backend bottom-left origin to Flutter top-left origin.
       final double left = bbox.x * size.width;
       final double top = (1.0 - (bbox.y + bbox.height)) * size.height;
       final double width = bbox.width * size.width;
@@ -517,7 +513,7 @@ class BBoxPainter extends CustomPainter {
   }
 }
 
-/// Helper widget to resolve the image aspect ratio dynamically and constrain BBox painter overlays to exact image bounds
+/// Helper widget to resolve image aspect ratio dynamically and constrain BBox painter overlays
 class _BBoxImagePreview extends StatefulWidget {
   final String imageUrl;
   final List<BoundingBox> bboxes;

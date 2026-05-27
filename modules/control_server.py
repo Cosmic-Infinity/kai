@@ -15,6 +15,7 @@ IMAGE_DIR = os.path.join(PROJECT_ROOT, "images_ready")
 CONTROL_FEED = "control"
 POWER_FEED = "POWER"
 from config_manager import load_config
+from logger import kai_print as print
 
 
 def _parse_status_filename(filename: str):
@@ -74,10 +75,7 @@ def write_to_power_feed(content: str) -> None:
 
 
 def control_command_loop() -> None:
-    """
-    Fast loop that continuously checks for control commands from the UI.
-    Runs in a separate thread to respond instantly to user requests.
-    """
+    """Checks for UI control commands and responds instantly."""
     print("[Control Loop] Started - monitoring control feed for instant response...")
     while True:
         try:
@@ -89,10 +87,7 @@ def control_command_loop() -> None:
 
 
 def camera_monitoring_loop() -> None:
-    """
-    Slow loop that monitors camera statuses.
-    Automatically turns off power after consecutive "NO" statuses, configured dynamically.
-    """
+    """Monitors camera statuses and turns off power after consecutive 'NO' statuses."""
     print(f"[Monitoring Loop] Started - checking camera statuses based on dynamic configuration...")
     camera_inactivity_count: Dict[str, int] = {}
     last_check_time = 0

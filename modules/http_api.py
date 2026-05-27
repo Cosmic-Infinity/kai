@@ -9,7 +9,8 @@ from urllib.parse import urlparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config_manager import load_config
 
-logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+from logger import configure_logging
+configure_logging(logging.INFO)
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IMAGE_DIR = os.path.join(PROJECT_ROOT, "images_ready")
 
@@ -118,6 +119,15 @@ class KAIRequestHandler(SimpleHTTPRequestHandler):
             self.send_error(404, "Not Found")
 
 def run_server():
+    # Check for API key and log a warning if missing
+    config = load_config()
+    if not config.get("API_KEY"):
+        logging.warning("=" * 60)
+        logging.warning("SECURITY WARNING: No API_KEY is set in config.json!")
+        logging.warning("The HTTP API is currently unauthenticated and open to the local network.")
+        logging.warning("Anyone can view cameras or overwrite system configuration.")
+        logging.warning("=" * 60)
+        
     port = 8000
     server_address = ('0.0.0.0', port)
     httpd = HTTPServer(server_address, KAIRequestHandler)

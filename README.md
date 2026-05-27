@@ -11,7 +11,7 @@
 
 ## Overview
 
-KAI is an IoT system designed for large organizations to save energy by automatically turning off appliances when rooms are unoccupied. Using camera feeds and YOLOv11 computer vision, the system detects human presence and intelligently manages power to connected devices. Refer to the system overview image or the system architecture to know more about how it works.
+KAI is an IoT system designed for large organizations to save energy by automatically turning off appliances when rooms are unoccupied. Using existing camera feeds and YOLOv11 computer vision, the system detects human presence and intelligently manages power to connected devices. Refer to the system overview image or the system architecture to know more about how it works.
 
 ### Key Features
 

@@ -23,6 +23,7 @@ FORCE_SERVED_FEED = "force_served"
 BATCH_SIZE = 25
 YOLO_MODEL_NAME = os.path.join(PROJECT_ROOT, 'models', 'yolo11s.pt')  # Change this to use a different YOLO model
 from config_manager import load_config
+from logger import kai_print as print
 
 # --- YOLO Model Initialization ---
 def get_device():
@@ -73,7 +74,7 @@ def detect_person_in_batch(image_paths: Iterable[str]) -> Dict[str, tuple]:
                     coords = box.xyxyn[0].tolist()
                     conf = float(box.conf[0])
                     x1, y1, x2, y2 = coords
-                    # Map to UI format (fx, fy, fw, fh) with Kivy bottom-left origin
+                    # Map to UI format (fx, fy, fw, fh) with bottom-left origin
                     fx = x1
                     fy = 1.0 - y2
                     fw = x2 - x1
@@ -311,19 +312,23 @@ def main():
 
     last_capture_time = 0
     while True:
-        # Process force requests immediately
-        process_force_requests()
+        try:
+            # Process force requests immediately
+            process_force_requests()
 
-        # Regular capture based on config
-        current_time = time.time()
-        config = load_config()
-        capture_interval = config.get("IMAGE_SERVER_INTERVAL", 60)
-        
-        if current_time - last_capture_time >= capture_interval:
-            capture_and_update_images()
-            last_capture_time = current_time
+            # Regular capture based on config
+            current_time = time.time()
+            config = load_config()
+            capture_interval = config.get("IMAGE_SERVER_INTERVAL", 60)
+            
+            if current_time - last_capture_time >= capture_interval:
+                capture_and_update_images()
+                last_capture_time = current_time
 
-        time.sleep(1)
+            time.sleep(1)
+        except Exception as e:
+            print(f"[Image Server] Critical error in main loop: {e}")
+            time.sleep(1)
 
 if __name__ == "__main__":
     main()

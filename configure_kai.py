@@ -79,16 +79,19 @@ def configure_mosquitto_broker(username, password):
             except Exception as e:
                 print(colored(f"[WARN] Failed to delete existing passwd file: {e}", Colors.YELLOW))
                 
-        res = subprocess.run(["mosquitto_passwd.exe", "-c", "-b", "passwd", username, password], capture_output=True, text=True)
-        if res.returncode == 0:
-            print(colored("[OK] Password file created successfully.", Colors.GREEN))
-            # Reset permissions so the LocalSystem account can read it when running as a service
-            subprocess.run(["icacls", "passwd", "/reset"], capture_output=True)
+        if password:
+            res = subprocess.run(["mosquitto_passwd.exe", "-c", "-b", "passwd", username, password], capture_output=True, text=True)
+            if res.returncode == 0:
+                print(colored("[OK] Password file created successfully.", Colors.GREEN))
+                # Reset permissions so the LocalSystem account can read it when running as a service
+                subprocess.run(["icacls", "passwd", "/reset"], capture_output=True)
+            else:
+                print(colored(f"[FAIL] Failed to create password file: {res.stderr}", Colors.RED))
+                print("Attempting to restart service...")
+                subprocess.run(["net", "start", "mosquitto"], capture_output=True)
+                return False
         else:
-            print(colored(f"[FAIL] Failed to create password file: {res.stderr}", Colors.RED))
-            print("Attempting to restart service...")
-            subprocess.run(["net", "start", "mosquitto"], capture_output=True)
-            return False
+            print(colored("[WARN] Skipping Mosquitto password file creation (No password provided).", Colors.YELLOW))
             
         print("[3/5] Updating mosquitto.conf...")
         conf_path = "mosquitto.conf"
@@ -105,8 +108,15 @@ def configure_mosquitto_broker(username, password):
             "password_file C:\\Program Files\\mosquitto\\passwd"
         )
         
-        if "listener 1883 0.0.0.0" in content or "listener 1883" in content:
-            print(colored("[OK] Custom KAI configuration listener already present.", Colors.GREEN))
+        if "KAI Dashboard System custom configuration" in content:
+            # We already have our block, let's update it to ensure correct auth level
+            print(colored("[OK] Custom KAI configuration listener already present. Updating auth settings...", Colors.GREEN))
+            if password:
+                content = content.replace("allow_anonymous true", "allow_anonymous false")
+                if "password_file" not in content:
+                    content += "\npassword_file C:\\Program Files\\mosquitto\\passwd\n"
+            else:
+                content = content.replace("allow_anonymous false", "allow_anonymous true")
         else:
             print("Appending custom listener configuration to mosquitto.conf...")
             custom_config = (
@@ -115,9 +125,13 @@ def configure_mosquitto_broker(username, password):
                 "# KAI Dashboard System custom configuration\n"
                 "# =================================================================\n"
                 "listener 1883 0.0.0.0\n"
-                "allow_anonymous false\n"
-                "password_file C:\\Program Files\\mosquitto\\passwd\n"
             )
+            if password:
+                custom_config += "allow_anonymous false\n"
+                custom_config += "password_file C:\\Program Files\\mosquitto\\passwd\n"
+            else:
+                custom_config += "allow_anonymous true\n"
+                
             content += custom_config
             print(colored("[OK] Custom listener configuration appended.", Colors.GREEN))
             
@@ -163,17 +177,24 @@ def set_custom_credentials():
     print(colored("==============================================", Colors.HEADER))
     
     username = input("\nEnter MQTT Username [kai_admin]: ").strip() or "kai_admin"
-    password = getpass.getpass("Enter MQTT Password: ").strip()
+    password = getpass.getpass("Enter MQTT Password (Optional): ").strip()
+    
     if not password:
-        print(colored("[FAIL] MQTT password cannot be empty.", Colors.RED))
-        return
+        print(colored("\n[SECURITY WARNING] No MQTT Password provided!", Colors.YELLOW))
+        print(colored("The Mosquitto broker will be configured with 'allow_anonymous true'.", Colors.YELLOW))
+        print(colored("Anyone on your local network will be able to connect to the broker.", Colors.YELLOW))
+    else:
+        confirm_password = getpass.getpass("Confirm MQTT Password: ").strip()
+        if password != confirm_password:
+            print(colored("[FAIL] Passwords do not match.", Colors.RED))
+            return
         
-    confirm_password = getpass.getpass("Confirm MQTT Password: ").strip()
-    if password != confirm_password:
-        print(colored("[FAIL] Passwords do not match.", Colors.RED))
-        return
-        
-    api_key = getpass.getpass("Enter Image Server HTTP API Key (Optional): ").strip() or ""
+    api_key = getpass.getpass("\nEnter Image Server HTTP API Key (Optional): ").strip() or ""
+    
+    if not api_key:
+        print(colored("\n[SECURITY WARNING] No HTTP API Key provided!", Colors.YELLOW))
+        print(colored("The HTTP API will fail open, allowing unauthenticated network access.", Colors.YELLOW))
+        print(colored("Anyone on the network can view camera frames and update system configs.", Colors.YELLOW))
     
     # Save to config.json SSoT
     config = load_config()
@@ -247,10 +268,16 @@ def reset_passwords():
         set_custom_credentials()
     elif choice == '2':
         api_key = getpass.getpass("\nEnter new Image Server HTTP API Key (Optional): ").strip()
+        
+        if not api_key:
+            print(colored("\n[SECURITY WARNING] No HTTP API Key provided!", Colors.YELLOW))
+            print(colored("The HTTP API will fail open, allowing unauthenticated network access.", Colors.YELLOW))
+            print(colored("Anyone on the network can view camera frames and update system configs.", Colors.YELLOW))
+            
         config = load_config()
         config["API_KEY"] = api_key
         save_config(config)
-        print(colored(f"[SUCCESS] API Key updated successfully! (New Key: {api_key if api_key else '[None / Public]'})", Colors.GREEN))
+        print(colored(f"\n[SUCCESS] API Key updated successfully! (New Key: {api_key if api_key else '[None / Public]'})", Colors.GREEN))
     elif choice == '3':
         return
     else:

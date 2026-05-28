@@ -1,31 +1,25 @@
-# kai - Automated Energy Management System
+# kai - The automated Infrastructure Management System
 
-> _An automated infrastructure management system focused on reducing power usage. Hooks into pre-existing infrastructure to control appliances when not in use. Designed to be extremely flexible, low maintenance, and scalable as needed._
+> _An automated infrastructure management system focused on reducing energy consumption. Hooks into pre-existing infrastructure to control appliances when not in use. Designed to be extremely flexible, low maintenance, and scalable as needed._
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
-[![MQTT](https://img.shields.io/badge/MQTT-Mosquitto-orange.svg)](https://mosquitto.org/)
-[![YOLOv11](https://img.shields.io/badge/YOLOv11-Computer%20Vision-green.svg)](https://github.com/ultralytics/ultralytics)
-[![Flutter](https://img.shields.io/badge/UI-Flutter-blue.svg)](https://flutter.dev/)
+[![MQTT Server](https://img.shields.io/badge/MQTT_Server-Mosquitto-orange.svg)](https://mosquitto.org/)
+[![MQTT Client](https://img.shields.io/badge/MQTT_Client-Paho_MQTT-8E24AA.svg)](https://www.eclipse.org/paho/)
+[![Computer Vision](https://img.shields.io/badge/Computer_Vision-YOLOv11-green.svg)](https://github.com/ultralytics/ultralytics)
+[![ML](https://img.shields.io/badge/ML-PyTorch-EE4C2C.svg)](https://pytorch.org/)
+[![UI](https://img.shields.io/badge/UI-Flutter-blue.svg)](https://flutter.dev/)
 
 ---
 
 ## Overview
 
-kai is an IoT system designed for large organizations to save energy by automatically turning off appliances when rooms are unoccupied. Using existing camera feeds and YOLOv11 computer vision, the system detects human presence and intelligently manages power to connected devices. Refer to the system overview image or the system architecture to know more about how it works.
+kai is an IoT automation system designed for large organizations to save energy by automatically turning off appliances when rooms are unoccupied. Using existing camera feeds and computer vision, the system detects human presence and intelligently manages power to connected devices.
 
-### Key Features
+It is designed around a decoupled, event-driven pattern mediated by the **Mosquitto MQTT Broker** for low-latency control flow, combined with an **HTTP API Server** for high-bandwidth data retrieval (like camera feeds, configs, etc). Everything runs locally in the organization's network and hardware for absolute privacy and control. Hence each deployment is self-contained, and can have modular services attached for easy extensibility.
 
-**Automated Power Management** - Turns off appliances after detecting 300s (configurable) of no human presence.
-**Computer Vision** - YOLOv11-based person detection from camera feeds  
-**Near Real-time Dashboard** - Flutter UI (Android/Windows) showing live camera status and manual controls.
-**MQTT Architecture** - Scalable, real-time messaging with Eclipse Mosquitto  
-**One-Command Launch** - Start entire system with `python start.py`
+The system runs on multiple timers to monitor and control appliances, but can be triggered explicitly from the dashboard for manual checks or to override the system. It is designed to be self-healing and fault tolerant, while maintaining strict Access Controls both internally, and externally.
 
----
-
-The system is designed around a decoupled, event-driven pattern mediated by the **Mosquitto MQTT Broker** for low-latency control flow, combined with a **Shared File Cache (`images_ready/`)** and an **HTTP API Server** for high-bandwidth data retrieval (like camera feeds, configs, and YOLO bounding box outputs). 
-
-### Architecture Diagram
+### Core Architecture
 
 ![kai Architecture Diagram](images_screenshots/kai_architecture.png)
 
@@ -42,7 +36,7 @@ The system is designed around a decoupled, event-driven pattern mediated by the 
    * **Publishes to** `kai/force_request` when the user manually requests an immediate room check.
    * **Subscribes to** `kai/force_served` to know exactly when to pull the updated camera feed/image.
    * **Publishes to** `kai/control` for manual power overrides (`SET_CAM_<id>_ON` or `OFF`).
-   * **Secure Storage**: Persists authentication keys securely using hardware-backed and OS-level encrypted vaults (Windows Credential Manager / Android Keystore) rather than unencrypted registry files.
+   * **Secure Storage**: Persists authentication keys securely using hardware-backed and OS-level encrypted vaults (Windows Credential Manager / Android Keystore).
 
 3. **Control Server**
    * Automatically monitors camera presence statuses from the tagged images directory.
@@ -95,12 +89,19 @@ python configure_kai.py
 python start.py
 ```
 
-This launches all modules in separate windows:
+This launches the backend and monitoring modules in separate windows:
 
 - Image Server (processes camera feeds)
 - Control Server (manages power)
-- Dashboard UI (Flutter Desktop/Mobile via API)
+- HTTP API Server (exposes REST endpoints and video frames)
 - MQTT Monitor (traffic viewer)
+
+> [!IMPORTANT]
+> The Flutter Dashboard UI is not launched automatically by `start.py`. You must run it separately in a new terminal:
+> ```bash
+> cd dashboard
+> flutter run
+> ```
 
 **Manual Launch:**
 
@@ -111,11 +112,14 @@ python modules/image_server.py
 # Terminal 2 - Control Server
 python modules/control_server.py
 
-# Terminal 3 - Dashboard (Flutter)
+# Terminal 3 - HTTP API Server
+python modules/http_api.py
+
+# Terminal 4 - Dashboard (Flutter)
 cd dashboard
 flutter run
 
-# Terminal 4 - Monitor (optional)
+# Terminal 5 - Monitor (optional)
 python tools/monitor_mqtt.py
 ```
 
@@ -136,29 +140,33 @@ kai/
 │   └── workflows/
 │       ├── flutter_build_android.yml # Android APK compilation workflow
 │       └── flutter_build_windows.yml # Windows App compilation workflow
+├── config/                  # Centralized system configurations
+│   └── config.json          # Single Source of Truth configuration file
+├── dashboard/               # Flutter Source code (UI for Android/Windows)
 ├── docs/                    # Technical specifications & documentation
 │   └── system.txt
+├── images_ready/            # Processed YOLO results cache
+├── images_screenshots/      # System architecture & dashboard screenshots
+├── images_src/              # Mock raw input frames
 ├── models/                  # Object detection weights
 │   ├── yolo11m.pt
 │   └── yolo11s.pt
 ├── modules/                 # Application core modules
-│   ├── feeds.py             # MQTT feed management
-│   ├── image_server.py      # Camera processing and YOLO detector
+│   ├── config_manager.py    # Configuration loader and namespace manager
 │   ├── control_server.py    # Automatic appliance power control
-│   └── http_api.py          # Frame transmission web server
-├── config/                  # Centralized system configurations
-│   └── config.json          # Single Source of Truth configuration file
-├── dashboard/               # Flutter Source code (UI for Android/Windows)
+│   ├── feeds.py             # MQTT feed management
+│   ├── http_api.py          # Frame transmission web server
+│   ├── image_server.py      # Camera processing and YOLO detector
+│   └── logger.py            # Unified colorful logging module
 ├── tools/                   # Debugging and utility scripts
-│   ├── test_mqtt.py         # Test broker connection
+│   ├── finetune.py          # Fine-tuning utilities
 │   ├── monitor_mqtt.py      # Print real-time MQTT message feeds
 │   ├── security_stresstest.py # Run automated security audit and stress tests
-│   └── finetune.py          # Fine-tuning utilities
-├── requirements.txt         # Python dependencies
+│   └── test_mqtt.py         # Test broker connection
+├── configure_kai.py         # Interactive wizard script for Mosquitto & security setup
 ├── README.md                # System documentation
-├── start.py                 # One-command system environment launcher
-├── images_src/              # Mock raw input frames
-└── images_ready/            # Processed YOLO results cache
+├── requirements.txt         # Python dependencies
+└── start.py                 # One-command system environment launcher
 ```
 
 ---
@@ -186,57 +194,43 @@ MQTT_BROKER_HOST = "127.0.0.1"
 MQTT_BROKER_PORT = 1883
 ```
 
-### Image Server
+## System Components & Workflows
 
-- **Capture Interval**: 60 seconds (default)
-- **Batch Processing**: 25 images at a time
-- **Model**: YOLOv11 (auto-detects fine-tuned version)
+### 1. Image Server (YOLOv11 Detector)
+- **Image Processing**: Reads raw frames from `images_src/` every 60 seconds (default), runs YOLOv11 person detection, tags output as `CAM_<name>_YES.jpg` (person present) or `CAM_<name>_NO.jpg` (empty), and caches it in `images_ready/`.
+- **Force Updates**: Instantly captures and processes targeted camera requests on-demand.
+- **Model**: YOLOv11 (auto-detects fine-tuned model weights).
 
-### Control Server
+### 2. Dashboard (Flutter UI)
+- **Telemetry Display**: Reads camera occupancy statuses via the HTTP API Server, updating cards with high-contrast color borders: **Green** (person detected) or **Red** (room empty).
+- **Control Actions**: Publishes manual appliance override commands (`kai/control`) and on-demand room check requests (`kai/force_request`) instantly.
 
-- **Control Response**: ~100ms (instant)
-- **Status Monitoring**: Every 30 seconds (default)
-- **Auto Power-Off**: 10 consecutive "NO" detections (default)
+### 3. Control Server
+- **Dual-Thread Engine**:
+  - **Fast Thread (100ms)**: Regularly checks and executes manual dashboard power override commands instantly.
+  - **Slow Thread (30s)**: Regularly evaluates camera occupancy logs. Auto-powers off appliances after 10 consecutive "NO" detections to prevent energy waste.
+- **Actuator Feed**: Publishes final power state decisions directly to the `kai/power` feed.
 
-### Dashboard
+### 4. MQTT Communication & Feeds
+The system is built on a decoupled, event-driven pattern using isolated MQTT topics:
+- **`kai/force_request`**: Dashboard → Image Server (requests an immediate YOLO check)
+- **`kai/force_served`**: Image Server → Dashboard (signals that a forced update is complete)
+- **`kai/control`**: Dashboard → Control Server (triggers manual appliance overrides)
+- **`kai/power`**: Control Server → Appliances (actuates physical appliance power changes)
 
-- **Refresh Interval**: 30 seconds
-- **Visual Indicators**: Green (person detected), Red (no person)
-- **Controls**: Force update, Power toggle per camera
+### 5. HTTP API Server (Gateway)
+- **Video Frame Streaming**: Securely serves captured and tagged presence frames (`images_ready/`) to the Flutter Dashboard.
+- **Access Gateway**: Enforces secure token-based (Bearer Token) authentication to restrict frame viewing and API access to validated clients.
+- **Config & Path Masking**: Shields system config files (`config/config.json`) and internal server directories from configuration exposures.
 
----
+### 6. Interactive Setup Wizard & Diagnostics (`configure_kai.py`)
+- **Interactive Secure Setup**: Automates generation of cryptographically secure internal credentials, provisions multi-client Mosquitto password databases, and configures granular ACL policies.
+- **Targeted Credentials Reset**: Allows users to dynamically update individual module keys (such as dashboard or edge credentials) while keeping the rest of the production architecture isolated.
+- **Live System Diagnostics**: Runs complete loopback diagnostics checking connection status and authorization access profiles for all five system roles, testing the HTTP API gateway integrity, and displaying a high-contrast console status card.
 
-## How It Works
-
-### 1. Image Processing
-
-- Reads images from `images_src/` every 60 seconds
-- Runs YOLOv11 person detection
-- Tags images as `CAM_name_YES.jpg` (person) or `CAM_name_NO.jpg` (empty)
-- Saves to `images_ready/`
-- Handles force update requests instantly
-
-### 2. Dashboard (UI)
-
-- Displays all camera feeds with status borders
-- **Green border**: Person detected
-- **Red border**: No person detected
-- **Force Update**: Request immediate camera check
-- **Toggle Power**: Manual appliance control
-
-### 3. Control System
-
-- **Fast Thread**: Checks UI commands every 100ms
-- **Slow Thread**: Monitors camera status every 30s
-- Auto power-off after 10 consecutive "NO" readings
-- Writes power commands to POWER feed
-
-### 4. MQTT Communication
-
-- **kai/force_request**: Dashboard → Image Server
-- **kai/force_served**: Image Server → Dashboard
-- **kai/control**: Dashboard → Control Server
-- **kai/power**: Control Server → Appliances
+### 7. Security Stress Testing (`tools/security_stresstest.py`)
+- **Automated Penetration Auditor**: A dynamic test script evaluating all system safety features. 
+- **Security Checkpoints**: Automatically audits HTTP auth bypass attempts, malformed payload injections, MQTT credential gates, ACL role boundary isolation, and invalid wildcard topic subscriptions.
 
 ---
 
@@ -272,41 +266,25 @@ Runs a portable diagnostic test suite confirming strict privilege isolation limi
 * **MQTT Password Gatekeeper**: Stress-tests authentication, confirming that dictionary attacks or default logins are strictly rejected.
 * **Granular ACL Enforcement**: Simulates Dashboard role bypasses (unauthorized writes to `kai/power` or reads from `kai/control`) and wildcard sniffing attempts (`kai/#`) to confirm they are securely dropped and filtered.
 
-### Test Individual Modules
-
-```bash
-# Test image processing
-python modules/image_server.py
-
-# Test control logic
-python modules/control_server.py
-
-# Test UI
-cd dashboard
-flutter run
-```
-
 ---
 
 ## Troubleshooting
 
-| Problem                   | Solution                                  |
-| ------------------------- | ----------------------------------------- |
-| **"Connection refused"**  | Start Mosquitto: `net start mosquitto`    |
-| **"Import paho.mqtt"**    | Install: `pip install paho-mqtt`          |
-| **Images not processing** | Check `images_src/` has `CAM_*.jpg` files |
-| **Messages not received** | Verify topic names in `config/config.json` |
+The **kai** system includes built-in diagnostics to isolate problems quickly. If you run into issues, try executing the system loopback checks first:
+```bash
+python configure_kai.py  # Choose option 4 to run system diagnostics
+```
 
----
+Refer to the table below for common symptoms, root causes, and verified fixes:
 
-## Built With
-
-- **[Python](https://www.python.org/)** - Core language
-- **[YOLOv11](https://github.com/ultralytics/ultralytics)** - Computer vision
-- **[Eclipse Mosquitto](https://mosquitto.org/)** - MQTT broker
-- **[Paho MQTT](https://www.eclipse.org/paho/)** - MQTT client
-- **[Flutter](https://flutter.dev/)** - Dashboard UI
-- **[PyTorch](https://pytorch.org/)** - ML framework
+| Symptom / Error | Potential Cause | Verified Resolution |
+| :--- | :--- | :--- |
+| **MQTT `Connection refused`** <br>`[WinError 10061]` | Mosquitto Broker service is offline, or connection credentials are out of sync. | 1. Ensure the Mosquitto service is running: `net start mosquitto` (Windows Admin PowerShell). <br>2. Run `python configure_kai.py` to regenerate and verify credentials in `config/config.json`. |
+| **Mosquitto Exit Code `13`** <br>`(Permission Denied)` | Mosquitto parser failed to read configuration lines containing spaces or double quotes in paths (e.g. `C:\Program Files`). | Do **NOT** use double quotes around paths in `mosquitto.conf`. Run `python configure_kai.py` to automatically resolve the safe Windows 8.3 short-path format (e.g., `C:\PROGRA~1\mosquitto`) and write clean ACL pointers. |
+| **Constant MQTT Disconnects** <br>or telemetry dropping | Overlapping duplicate Client IDs connected to the same broker, or client ACL permission violation. | 1. Ensure **only one** instance of the dashboard/client is active at a time (duplicate Client IDs cause Mosquitto to disconnect old sockets). <br>2. In Production mode, components must use their exact designated usernames to respect topic security limits. |
+| **HTTP API Server Offline** <br>or dashboard shows `[OFFLINE]` | HTTP API server daemon is not running, or ports are blocked by firewall. | 1. Start the HTTP API Server manually in a new window: `python modules/http_api.py`. <br>2. Verify port bounds and settings match `config/config.json` properties. |
+| **Images Not Processing** <br>or occupancy stays empty | `images_src/` is empty, or YOLO weight files are missing from the `models/` folder. | 1. Place raw image files in `images_src/` named exactly in `CAM_*.jpg` format (e.g. `CAM_hallway.jpg`). <br>2. Make sure `models/yolo11s.pt` or `models/yolo11m.pt` is downloaded and present. |
+| **Diagnostics failing in console** <br>with encoding exceptions | Legacy Windows PowerShell or Command Prompt cannot parse high-contrast Unicode borders. | The configuration wizard includes auto-strip fallbacks. Run the diagnostics inside terminal environments that support `utf-8` formatting, or allow the tool to fallback to clean high-contrast ASCII boundaries. |
 
 ---
 
@@ -317,3 +295,4 @@ See [LICENSE](LICENSE) file for details.
 ---
 
 **Parts of this description was generated by AI. Please keep an eye out for inconsistencies.**
+

@@ -6,8 +6,8 @@ __pycache__/
 
 # Project specific
 human-detection-in-classroom/
-images_ready/
-images_src/
+#images_ready/
+#images_src/
 .buildozer/
 bin/
 *.apk

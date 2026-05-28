@@ -27,46 +27,7 @@ The system is designed around a decoupled, event-driven pattern mediated by the 
 
 ### Architecture Diagram
 
-```
-                                 ┌───────────────────────┐
-                                 │     Image Server      │
-                                 │  (YOLOv11 Detector)   │
-                                 └────▲─────────────┬────┘
-                                      │             │
-                   kai/force_request  │             │ Writes processed images
-                   (Subscribe Feed)   │             │ and bounding boxes (.json)
-                                      │             ▼
-               ┌──────────────────────┴─────────────┴───────────────┐
-               │               MQTT Broker (Mosquitto)              │
-               └──────▲─────────────▼▲──────────────▼▲───────────┬──┘
-                      │             ││              ││           │
-    kai/force_request │             ││              ││           │ kai/power
-    (Publish)         │  kai/force_ ││ kai/control  ││ kai/power │ (Subscribe)
-                      │  served     ││ (Publish)    ││ (Publish) │
-                      │  (Subscribe)││              ││           │
-                      ▼             │▼              │▼           ▼
-               ┌──────┴─────────────┴┐ ┌────────────┴┴┐ ┌────────┴─────┐
-               │      Dashboard      │ │   Control    │ │  Power Feed  │
-               │    (Flutter UI)     │ │   Server     │ │ (Appliances) │
-               └──────────▲──────────┘ └──────┬───────┘ └──────────────┘
-                          │                   │
-                          │                   │ Reads camera occupancy
-                          │                   │ status directly from disk
-                          │                   ▼
-                          │         ┌─────────────────────────────────┐
-                          │         │          images_ready/          │
-                          │         │  (Shared Directory / Data Cache)│
-                          │         └────────────────▲────────────────┘
-                          │                          │
-                          │                          │ Reads images and
-                          │ HTTP REST Requests       │ bounding box metadata
-                          │ (Port 8000)              │
-                          ▼                          │
-               ┌─────────────────────────────────────┴────────────────┐
-               │                   HTTP API Server                    │
-               │       Serves camera metadata and static images       │
-               └──────────────────────────────────────────────────────┘
-```
+![KAI Architecture Diagram](images_screenshots/kai_architecture.png)
 
 ### Component Roles & Feeds
 

@@ -1,7 +1,7 @@
 """
 MQTT Traffic Monitor
 
-This script subscribes to all KAI topics and displays messages in real-time.
+This script subscribes to all kai topics and displays messages in real-time.
 Useful for debugging and monitoring the system.
 """
 
@@ -39,7 +39,7 @@ def on_connect(client, userdata, flags, reason_code, properties):
         print(colored(f"Broker: {config.MQTT_BROKER_HOST}:{config.MQTT_BROKER_PORT}", Colors.CYAN))
         print(colored("\nSubscribing to topics:", Colors.YELLOW))
         
-        # Subscribe to all KAI topics
+        # Subscribe to all kai topics
         topics = [
             (config.TOPIC_FORCE_REQUEST, 1),
             (config.TOPIC_FORCE_SERVED, 1),

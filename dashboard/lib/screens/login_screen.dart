@@ -108,7 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'KAI Dashboard',
+                        'kai Dashboard',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                               fontWeight: FontWeight.bold,
@@ -117,7 +117,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'IoT Camera Controller Login',
+                        'User Login',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),

@@ -1,5 +1,5 @@
 """
-KAI IoT System Launcher
+kai IoT System Launcher
 
 This script launches all system modules and the MQTT monitor in separate terminal windows.
 It provides a convenient single-command startup for the entire system.

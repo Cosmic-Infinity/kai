@@ -1,4 +1,4 @@
-# KAI - Automated Energy Management System
+# kai - Automated Energy Management System
 
 > _An automated infrastructure management system focused on reducing power usage. Hooks into pre-existing infrastructure to control appliances when not in use. Designed to be extremely flexible, low maintenance, and scalable as needed._
 
@@ -11,7 +11,7 @@
 
 ## Overview
 
-KAI is an IoT system designed for large organizations to save energy by automatically turning off appliances when rooms are unoccupied. Using existing camera feeds and YOLOv11 computer vision, the system detects human presence and intelligently manages power to connected devices. Refer to the system overview image or the system architecture to know more about how it works.
+kai is an IoT system designed for large organizations to save energy by automatically turning off appliances when rooms are unoccupied. Using existing camera feeds and YOLOv11 computer vision, the system detects human presence and intelligently manages power to connected devices. Refer to the system overview image or the system architecture to know more about how it works.
 
 ### Key Features
 
@@ -27,7 +27,7 @@ The system is designed around a decoupled, event-driven pattern mediated by the 
 
 ### Architecture Diagram
 
-![KAI Architecture Diagram](images_screenshots/kai_architecture.png)
+![kai Architecture Diagram](images_screenshots/kai_architecture.png)
 
 ### Component Roles & Feeds
 

@@ -61,7 +61,7 @@ class MyApp extends StatelessWidget {
         );
 
         return MaterialApp(
-          title: 'KAI Dashboard',
+          title: 'kai Dashboard',
           debugShowCheckedModeBanner: false,
           themeMode: themeMode,
 

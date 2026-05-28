@@ -176,7 +176,7 @@ def configure_mosquitto_broker(config):
                 # Write the Access Control List (ACL) file
                 acl_content = (
                     "# =================================================================\n"
-                    "# KAI System Access Control Lists (DEVELOPER UNSAFE MODE)\n"
+                    "# kai System Access Control Lists (DEVELOPER UNSAFE MODE)\n"
                     "# =================================================================\n\n"
                     f"user {username}\n"
                     "topic readwrite kai/power\n"
@@ -242,7 +242,7 @@ def configure_mosquitto_broker(config):
                 # Write the Access Control List (ACL) file
                 acl_content = (
                     "# =================================================================\n"
-                    "# KAI System Access Control Lists (PRODUCTION ISOLATED MODE)\n"
+                    "# kai System Access Control Lists (PRODUCTION ISOLATED MODE)\n"
                     "# =================================================================\n\n"
                     f"user {img_user}\n"
                     "topic read kai/force_request\n"
@@ -278,18 +278,18 @@ def configure_mosquitto_broker(config):
         with open(conf_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
             
-        custom_config_header = "# =================================================================\n# KAI Dashboard System custom configuration"
+        custom_config_header = "# =================================================================\n# kai Dashboard System custom configuration"
         
         # Clean up any old custom configuration block entirely to prevent duplicate appends
         if custom_config_header in content:
-            print(colored("[OK] Custom KAI configuration listener found. Rewriting it cleanly...", Colors.GREEN))
-            # Truncate content at the start of the KAI custom block
+            print(colored("[OK] Custom kai configuration listener found. Rewriting it cleanly...", Colors.GREEN))
+            # Truncate content at the start of the kai custom block
             content = content.split(custom_config_header)[0].strip()
         else:
             print("Appending custom listener configuration to mosquitto.conf...")
             content = content.strip()
             
-        # Clean any legacy KAI configuration lines written outside the block, if any
+        # Clean any legacy kai configuration lines written outside the block, if any
         lines_clean = []
         for line in content.splitlines():
             if any(term in line for term in ["password_file", "acl_file"]) and "mosquitto" in line.lower() and not line.strip().startswith("#"):
@@ -302,7 +302,7 @@ def configure_mosquitto_broker(config):
         
         custom_config = (
             "# =================================================================\n"
-            "# KAI Dashboard System custom configuration\n"
+            "# kai Dashboard System custom configuration\n"
             "# =================================================================\n"
             "listener 1883 0.0.0.0\n"
             "allow_anonymous false\n"
@@ -333,7 +333,7 @@ def configure_mosquitto_broker(config):
     finally:
         os.chdir(orig_dir)
 
-def show_credentials_card(host, port, username, password, api_key, edge_user=None, edge_pass=None, color=Colors.CYAN, title="KAI SYSTEM CREDENTIALS"):
+def show_credentials_card(host, port, username, password, api_key, edge_user=None, edge_pass=None, color=Colors.CYAN, title="kai SYSTEM CREDENTIALS"):
     """Render a premium formatted terminal card displaying credentials."""
     card_width = 62
     safe_print("")
@@ -375,7 +375,7 @@ def warn_hot_swap():
 
 def set_custom_credentials():
     """Prompt user for custom credentials and save/configure them."""
-    print_banner("Configure KAI System Setup")
+    print_banner("Configure kai System Setup")
     
     if not warn_hot_swap():
         return
@@ -439,7 +439,7 @@ def set_custom_credentials():
             edge_user=edge_user,
             edge_pass=edge_pass,
             color=Colors.GREEN,
-            title="KAI PRODUCTION CREDENTIALS"
+            title="kai PRODUCTION CREDENTIALS"
         )
         print(colored("[SUCCESS] Credentials configured successfully!", Colors.GREEN + Colors.BOLD))
 
@@ -614,7 +614,7 @@ def reset_passwords():
 
 def run_system_diagnostics():
     """Read config.json and verify that the broker and all configured feeds are running as expected."""
-    print_banner("KAI SYSTEM DIAGNOSTICS")
+    print_banner("kai SYSTEM DIAGNOSTICS")
     
     config = load_config()
     host = config.get("MQTT_BROKER_HOST", "127.0.0.1")
@@ -786,7 +786,7 @@ def run_system_diagnostics():
     card_width = 62
     safe_print("")
     safe_print("╔" + "═" * card_width + "╗", Colors.CYAN)
-    safe_print("║" + " KAI IoT SYSTEM INTEGRITY DIAGNOSTICS CARD ".center(card_width, " ") + "║", Colors.CYAN + Colors.BOLD)
+    safe_print("║" + " kai IoT SYSTEM INTEGRITY DIAGNOSTICS CARD ".center(card_width, " ") + "║", Colors.CYAN + Colors.BOLD)
     safe_print("╠" + "═" * card_width + "╣", Colors.CYAN)
     
     # Render MQTT results
@@ -847,7 +847,7 @@ def main():
         # Clear console color
         print(Colors.ENDC, end="")
         
-        print_banner("KAI IoT System Wizard")
+        print_banner("kai IoT System Wizard")
         print("1) Set Custom Credentials (First-Time Setup)")
         print("2) Reset Passwords & Server Keys")
         print("3) Enable Developer Test Mode (Pre-seed keys)")
@@ -866,7 +866,7 @@ def main():
         elif choice == '4':
             run_system_diagnostics()
         elif choice == '5':
-            print(colored("\nExiting KAI Wizard. Goodbye!", Colors.GREEN))
+            print(colored("\nExiting kai Wizard. Goodbye!", Colors.GREEN))
             break
         else:
             print(colored("\n[FAIL] Invalid choice. Please select from 1-5.", Colors.RED))
@@ -878,14 +878,14 @@ if __name__ == "__main__":
     
     # Prompt before UAC elevation to ensure non-intrusive flow
     if not is_admin():
-        print_banner("KAI SYSTEM CONFIGURATION WIZARD")
-        print(colored("\n[INFO] Setting up the KAI System requires administrative privileges.", Colors.YELLOW))
+        print_banner("kai SYSTEM CONFIGURATION WIZARD")
+        print(colored("\n[INFO] Setting up the kai System requires administrative privileges.", Colors.YELLOW))
         print("This is necessary to install/start the Mosquitto MQTT broker Windows service,")
         print("create system password registries, and configure restricted access permissions.")
         print()
         response = input(colored("Do you want to elevate privileges and start the configuration wizard? (y/n) [y]: ", Colors.BOLD)).strip().lower()
         if response == 'n':
-            print(colored("\nSetup cancelled. Administrative privileges are required to configure KAI.", Colors.RED))
+            print(colored("\nSetup cancelled. Administrative privileges are required to configure kai.", Colors.RED))
             sys.exit(0)
             
     # Elevate privileges and launch menu

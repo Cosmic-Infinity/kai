@@ -48,7 +48,7 @@ dashboard_user = config.get("MQTT_USERNAME", "kai")
 dashboard_pass = config.get("MQTT_PASSWORD", "kai")
 
 print(colored("==============================================================", Colors.CYAN))
-print(colored("          KAI DEEP-DIVE SECURITY AUDIT & STRESS TEST          ", Colors.CYAN + Colors.BOLD))
+print(colored("          kai DEEP-DIVE SECURITY AUDIT & STRESS TEST          ", Colors.CYAN + Colors.BOLD))
 print(colored("==============================================================", Colors.CYAN))
 print(f"Target MQTT Broker:  {host}:{port}")
 print(f"Target HTTP API:     http://127.0.0.1:8000")

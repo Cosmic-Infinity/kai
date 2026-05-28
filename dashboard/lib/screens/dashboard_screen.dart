@@ -170,7 +170,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'KAI Dashboard',
+                  'kai Dashboard',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: screenWidth < 500 ? 16 : 18,

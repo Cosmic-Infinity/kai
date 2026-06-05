@@ -1,4 +1,4 @@
-# kai - The automated Infrastructure Management System
+# kai
 
 > _An automated infrastructure management system focused on reducing energy consumption. Hooks into pre-existing infrastructure to control appliances when not in use. Designed to be extremely flexible, low maintenance, and scalable as needed._
 
@@ -13,11 +13,14 @@
 
 ## Overview
 
-kai is an IoT automation system designed for large organizations to save energy by automatically turning off appliances when rooms are unoccupied. Using existing camera feeds and computer vision, the system detects human presence and intelligently manages power to connected devices.
+kai is an automation system designed for large organizations to save energy by automatically turning off appliances when rooms are unoccupied. Using pre-existing camera and network infrastructure, and computer vision, the system detects human presence and intelligently manages power to connected devices.
 
-It is designed around a decoupled, event-driven pattern mediated by the **Mosquitto MQTT Broker** for low-latency control flow, combined with an **HTTP API Server** for high-bandwidth data retrieval (like camera feeds, configs, etc). Everything runs locally in the organization's network and hardware for absolute privacy and control. Hence each deployment is self-contained, and can have modular services attached for easy extensibility.
+It is designed around a decoupled, event-driven pattern mediated by a Mosquitto MQTT Broker for low-latency control flow, combined with an HTTP API Server for high-bandwidth data retrieval (say, camera feeds, configs, etc). Everything runs locally in the organization's network and hardware for absolute privacy and control. Hence each deployment is self-contained, and can have modular services attached for easy extensibility.
 
-The system runs on multiple timers to monitor and control appliances, but can be triggered explicitly from the dashboard for manual checks or to override the system. It is designed to be self-healing and fault tolerant, while maintaining strict Access Controls both internally, and externally.
+It uses timers at multiple levels to monitor and control appliances, but can be triggered explicitly from the dashboard for manual checks or to override the system. It is designed to be self-healing and fault tolerant, while maintaining strict access controls both internally, and externally.
+
+A thing to note, the system automatically only ever writes `OFF` signals to turn off appliances. The power `ON` signal is always a manual override. Hence **Auto power OFF** and **Manual power ON**. This is a deliberate design choice.
+
 
 ### Core Architecture
 
@@ -36,15 +39,14 @@ The system runs on multiple timers to monitor and control appliances, but can be
    * **Publishes to** `kai/force_request` when the user manually requests an immediate room check.
    * **Subscribes to** `kai/force_served` to know exactly when to pull the updated camera feed/image.
    * **Publishes to** `kai/control` for manual power overrides (`SET_CAM_<id>_ON` or `OFF`).
-   * **Secure Storage**: Persists authentication keys securely using hardware-backed and OS-level encrypted vaults (Windows Credential Manager / Android Keystore).
+   * **Secure Storage**: Persists authentication keys securely using OS-level encrypted vaults (Windows Credential Manager / Android Keystore).
 
 3. **Control Server**
    * Automatically monitors camera presence statuses from the tagged images directory.
    * **Subscribes to** `kai/control` to receive manual power overrides from the Dashboard.
    * **Publishes to** `kai/power` to toggle appliances (either via automated 10-consecutive "NO" detection timeout or manual overrides).
 
-4. **Power Feed (Appliances / Relays)**
-   * **Subscribes to** `kai/power` to toggle connected physical relays and appliances.
+4. **Power Feed ( `kai/power` )**  This is the system's output, where Appliances/Relays subscribes to, to know when to toggle power.
 
 5. **HTTP API Server (Port 8000)**
    * Built on a lightweight HTTP protocol to decouple static resource retrieval from the real-time MQTT message bus.
@@ -286,13 +288,8 @@ Refer to the table below for common symptoms, root causes, and verified fixes:
 | **Images Not Processing** <br>or occupancy stays empty | `images_src/` is empty, or YOLO weight files are missing from the `models/` folder. | 1. Place raw image files in `images_src/` named exactly in `CAM_*.jpg` format (e.g. `CAM_hallway.jpg`). <br>2. Make sure `models/yolo11s.pt` or `models/yolo11m.pt` is downloaded and present. |
 | **Diagnostics failing in console** <br>with encoding exceptions | Legacy Windows PowerShell or Command Prompt cannot parse high-contrast Unicode borders. | The configuration wizard includes auto-strip fallbacks. Run the diagnostics inside terminal environments that support `utf-8` formatting, or allow the tool to fallback to clean high-contrast ASCII boundaries. |
 
----
-
-## License
-
-See [LICENSE](LICENSE) file for details.
 
 ---
 
-**Parts of this description was generated by AI. Please keep an eye out for inconsistencies.**
+**Parts of this description were generated by AI. Although efforts have been made for accuracy, please flag inconsistencies if you happen to notice them.**
 

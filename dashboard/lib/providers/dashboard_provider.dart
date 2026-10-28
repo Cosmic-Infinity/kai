@@ -24,6 +24,10 @@ class DashboardProvider with ChangeNotifier {
   ApiService? _apiService;
   MqttService? _mqttService;
 
+  /// Why the last login probe or settings request failed (shown to the user)
+  String? _lastApiError;
+  String? get lastApiError => _lastApiError;
+
   Map<String, Camera> _cameras = {};
   // Power states are tracked locally so MQTT updates survive HTTP refreshes
   final Map<String, String> _powerStates = {};
@@ -83,7 +87,10 @@ class DashboardProvider with ChangeNotifier {
   Future<bool> login(String host, String username, String password, String apiKey) async {
     final api = ApiService(host: host, apiKey: apiKey);
     final config = await api.fetchConfig();
-    if (config == null) return false;
+    if (config == null) {
+      _lastApiError = api.lastError;
+      return false;
+    }
 
     _host = host;
     _username = username;
@@ -188,6 +195,7 @@ class DashboardProvider with ChangeNotifier {
     _password = '';
     _apiKey = '';
     _apiService = null;
+    _powerStates.clear();
 
     // Securely wipe all stored credentials from the encrypted vault
     await _secureStorage.delete(key: 'host');
@@ -242,8 +250,11 @@ class DashboardProvider with ChangeNotifier {
 
   /// Publish a force-capture request via MQTT; auto-cancels spinner after 12 s
   void requestForceUpdate(String cameraId) {
+    if (_mqttService?.publishForceUpdateRequest(cameraId) != true) {
+      _markMqttOffline();
+      return;
+    }
     _pendingForceUpdates.add(cameraId);
-    _mqttService?.publishForceUpdateRequest(cameraId);
     notifyListeners();
 
     Timer(const Duration(seconds: 12), () {
@@ -254,14 +265,25 @@ class DashboardProvider with ChangeNotifier {
     });
   }
 
-  /// Optimistically update power state locally, then publish MQTT command
+  /// Publish the MQTT command, then optimistically update power state locally.
+  /// If the command could not be sent, the UI is left unchanged and switches to its offline state.
   void togglePowerState(String cameraId, String currentState) {
     final newState = currentState == 'ON' ? 'OFF' : 'ON';
+    if (_mqttService?.publishControlCommand(cameraId, newState) != true) {
+      _markMqttOffline();
+      return;
+    }
     _powerStates[cameraId] = newState;
     if (_cameras.containsKey(cameraId)) {
       _cameras[cameraId] = _cameras[cameraId]!.copyWith(powerState: newState);
     }
-    _mqttService?.publishControlCommand(cameraId, newState);
+    notifyListeners();
+  }
+
+  /// The connection flag said "connected" but the socket was dead - surface it so the UI shows offline controls
+  void _markMqttOffline() {
+    debugPrint('[DashboardProvider] MQTT command could not be sent - marking connection offline');
+    _isMqttConnected = false;
     notifyListeners();
   }
 
@@ -370,6 +392,7 @@ class DashboardProvider with ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchSystemConfig() async {
     final config = await _apiService?.fetchConfig();
+    _lastApiError = config == null ? _apiService?.lastError : null;
     if (config != null && config.containsKey('DASHBOARD_INTERVAL')) {
       final newInterval = config['DASHBOARD_INTERVAL'] as int? ?? 30;
       if (_refreshInterval != newInterval) {
@@ -386,6 +409,7 @@ class DashboardProvider with ChangeNotifier {
 
   Future<bool> saveSystemSettings(Map<String, int> settings) async {
     final success = await (_apiService?.saveConfig(settings) ?? Future.value(false));
+    _lastApiError = success ? null : _apiService?.lastError;
     if (success && settings.containsKey('DASHBOARD_INTERVAL')) {
       _refreshInterval = settings['DASHBOARD_INTERVAL']!;
       _elapsed = 0;

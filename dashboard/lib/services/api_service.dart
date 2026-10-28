@@ -10,6 +10,22 @@ class ApiService {
 
   ApiService({required this.host, this.port = 8000, this.apiKey});
 
+  /// Human-readable reason for the most recent failed request (null after a success)
+  String? lastError;
+
+  String _describeFailure(http.Response response) {
+    if (response.statusCode == 401) {
+      return 'Server rejected the API key (401 Unauthorized).';
+    }
+    try {
+      final body = jsonDecode(response.body);
+      if (body is Map && body['error'] is String) return body['error'] as String;
+    } catch (_) {
+      // Body wasn't JSON - fall through to the status code
+    }
+    return 'Server returned HTTP ${response.statusCode}.';
+  }
+
   String get baseUrl => 'http://$host:$port';
 
   Map<String, String> get _headers => {
@@ -23,9 +39,12 @@ class ApiService {
           .get(Uri.parse('$baseUrl/api/config'), headers: _headers)
           .timeout(const Duration(seconds: 4));
       if (response.statusCode == 200) {
+        lastError = null;
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
+      lastError = _describeFailure(response);
     } catch (e) {
+      lastError = 'Could not reach server: $e';
       debugPrint('[ApiService] fetchConfig error: $e');
     }
     return null;
@@ -38,6 +57,7 @@ class ApiService {
           .get(Uri.parse('$baseUrl/api/cameras'), headers: _headers)
           .timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
+        lastError = null;
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         return data.map((camId, jsonMap) {
           // Rewrite relative image path to absolute URL with cache-bust timestamp
@@ -48,11 +68,19 @@ class ApiService {
           final updatedJson = {...jsonMap, 'image_path': absolutePath};
           return MapEntry(
             camId,
-            Camera.fromJson(camId, updatedJson, powerState: currentPowerStates[camId] ?? 'ON'),
+            // Locally tracked state (kept current by MQTT) wins; otherwise take what the
+            // server last recorded, so a fresh start shows cameras the system already powered off.
+            Camera.fromJson(
+              camId,
+              updatedJson,
+              powerState: currentPowerStates[camId] ?? updatedJson['power_state'] as String? ?? 'ON',
+            ),
           );
         });
       }
+      lastError = _describeFailure(response);
     } catch (e) {
+      lastError = 'Could not reach server: $e';
       debugPrint('[ApiService] fetchCameras error: $e');
     }
     return null;
@@ -66,8 +94,14 @@ class ApiService {
         headers: {..._headers, 'Content-Type': 'application/json'},
         body: jsonEncode(settings),
       );
-      return response.statusCode == 200;
+      if (response.statusCode == 200) {
+        lastError = null;
+        return true;
+      }
+      lastError = _describeFailure(response);
+      return false;
     } catch (e) {
+      lastError = 'Could not reach server: $e';
       debugPrint('[ApiService] saveConfig error: $e');
       return false;
     }

@@ -1,17 +1,13 @@
 # kai_dashboard
 
-A new Flutter project.
+Flutter UI for the **kai** system (Android / Windows). Shows camera occupancy, requests on-demand room checks, and sends manual power overrides.
 
-## Getting Started
+- Camera list, images and settings come from the HTTP API Server (`http://<host>:8000`, `X-API-Key` header).
+- Real-time actions and telemetry use MQTT (`<host>:1883`) with the dashboard account created by `configure_kai.py`.
 
-This project is a starting point for a Flutter application.
+See the [root README](../README.md) for setup and architecture.
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+flutter pub get
+flutter run
+```

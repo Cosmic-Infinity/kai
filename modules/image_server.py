@@ -1,7 +1,6 @@
 import os
 import sys
 import time
-import random
 import shutil
 from typing import Dict, Iterable, List
 
@@ -10,6 +9,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import torch
 import json
+from datetime import datetime
+from PIL import Image, UnidentifiedImageError
 from ultralytics import YOLO
 
 from feeds import append_message, consume_messages
@@ -22,7 +23,7 @@ FORCE_REQUEST_FEED = "force_request"
 FORCE_SERVED_FEED = "force_served"
 BATCH_SIZE = 25
 YOLO_MODEL_NAME = os.path.join(PROJECT_ROOT, 'models', 'yolo11s.pt')  # Change this to use a different YOLO model
-from config_manager import load_config
+from config_manager import load_config, load_frame_log, save_frame_log
 from logger import kai_print as print
 
 # --- YOLO Model Initialization ---
@@ -52,60 +53,132 @@ except Exception as e:
 # --- End YOLO Initialization ---
 
 
+def _result_to_detection(result) -> tuple:
+    """Convert one YOLO result into ('YES' or 'NO', bboxes_list)."""
+    bboxes = []
+    for box in result.boxes:
+        x1, y1, x2, y2 = box.xyxyn[0].tolist()
+        conf = float(box.conf[0])
+        # Map to UI format (fx, fy, fw, fh) with bottom-left origin
+        fx = x1
+        fy = 1.0 - y2
+        fw = x2 - x1
+        fh = y2 - y1
+
+        # Gradient color from Red (F43F5E) to Green (10B981) based on confidence
+        r = int(244 + (16 - 244) * conf)
+        g = int(63 + (185 - 63) * conf)
+        b = int(94 + (129 - 94) * conf)
+        color = f"#{r:02X}{g:02X}{b:02X}"
+
+        bboxes.append((fx, fy, fw, fh, f"Person {int(conf*100)}%", color))
+    return ("YES" if bboxes else "NO"), bboxes
+
+
+def _predict(image_paths: List[str]):
+    return MODEL.predict(source=image_paths, device=DEVICE, classes=[0], verbose=False)  # Class 0 is 'person'
+
+
 def detect_person_in_batch(image_paths: Iterable[str]) -> Dict[str, tuple]:
     """
-    Runs person detection on a batch of images using YOLOv8.
+    Runs person detection on a batch of images using YOLOv11.
     Returns a dictionary mapping image path to ('YES' or 'NO', bboxes_list).
+
+    Images that could not be processed are left out of the result (and the error is
+    reported) so their previous status is kept - a failed detection must never be
+    mistaken for an empty room, since 'NO' eventually powers appliances off.
     """
-    if not MODEL:
-        print("[YOLO] Model not loaded, returning random status.")
-        return {path: (("YES" if random.random() > 0.5 else "NO"), []) for path in image_paths}
-
     image_paths = list(image_paths)
-    results_map: Dict[str, tuple] = {path: ("NO", []) for path in image_paths}
-    try:
-        # Process images in batches
-        predictions = MODEL.predict(source=image_paths, device=DEVICE, classes=[0], verbose=False) # Class 0 is 'person'
-        
-        for i, result in enumerate(predictions):
-            bboxes = []
-            if len(result.boxes) > 0:  # A person was detected
-                for box in result.boxes:
-                    coords = box.xyxyn[0].tolist()
-                    conf = float(box.conf[0])
-                    x1, y1, x2, y2 = coords
-                    # Map to UI format (fx, fy, fw, fh) with bottom-left origin
-                    fx = x1
-                    fy = 1.0 - y2
-                    fw = x2 - x1
-                    fh = y2 - y1
-                    
-                    # Gradient color from Red (F43F5E) to Green (10B981) based on confidence
-                    r = int(244 + (16 - 244) * conf)
-                    g = int(63 + (185 - 63) * conf)
-                    b = int(94 + (129 - 94) * conf)
-                    color = f"#{r:02X}{g:02X}{b:02X}"
-                    
-                    bboxes.append((fx, fy, fw, fh, f"Person {int(conf*100)}%", color))
-                results_map[image_paths[i]] = ("YES", bboxes)
+    if not MODEL:
+        print("[YOLO] Model not loaded - skipping detection, existing camera statuses are left unchanged.")
+        return {}
 
+    try:
+        predictions = _predict(image_paths)
+        if len(predictions) != len(image_paths):
+            raise RuntimeError(f"expected {len(image_paths)} results, got {len(predictions)}")
+        pairs = list(zip(image_paths, predictions))
     except Exception as e:
-        print(f"[YOLO] Error during batch prediction: {e}")
-    
-    return results_map
+        # Retry one by one so a single bad image doesn't block the rest of the batch
+        print(f"[YOLO] Batch prediction failed ({e}); retrying images individually.")
+        pairs = []
+        for path in image_paths:
+            try:
+                pairs.append((path, _predict([path])[0]))
+            except Exception as img_err:
+                print(f"[YOLO] Skipping '{os.path.basename(path)}', status left unchanged: {img_err}")
+
+    return {path: _result_to_detection(result) for path, result in pairs}
+
+
+# --- Frame timekeeping ---
+EXIF_DATETIME_ORIGINAL = 36867  # in the Exif sub-IFD
+EXIF_DATETIME = 306
+EXIF_SUB_IFD = 0x8769
+
+# Camera clocks can't be trusted to be right, so they are only informational: every timing
+# decision (staleness, inactivity) uses this server's clock via "processed_at".
+CLOCK_SKEW_WARN_SECONDS = 300
+
+_frame_log: Dict[str, dict] = load_frame_log()
+_skewed_cameras = set()
+
+
+def _exif_time(image_path: str):
+    """The capture timestamp the camera wrote into the frame (camera clock, local time), or None."""
+    try:
+        with Image.open(image_path) as img:
+            exif = img.getexif()
+            stamp = exif.get_ifd(EXIF_SUB_IFD).get(EXIF_DATETIME_ORIGINAL) or exif.get(EXIF_DATETIME)
+        if stamp:
+            return datetime.strptime(str(stamp).strip(), "%Y:%m:%d %H:%M:%S").timestamp()
+    except (OSError, UnidentifiedImageError, ValueError) as e:
+        print(f"[Image Server] Could not read EXIF time from '{os.path.basename(image_path)}' ({e}); using file time.")
+    return None
+
+
+def _record_frame(camera_id: str, source_path: str) -> None:
+    """
+    Log when a camera's frame was taken and processed.
+
+    captured_at: the camera's EXIF timestamp if present, otherwise the file's modification time
+    (when the frame landed in images_src, by this server's clock). camera_clock_offset is how far
+    the camera's clock disagrees with the file time; large offsets are reported once per camera.
+    """
+    entry = {"captured_at": None, "camera_clock_offset": None, "processed_at": time.time()}
+    try:
+        file_time = os.path.getmtime(source_path)
+    except OSError as e:  # source frame replaced/removed since it was processed
+        print(f"[Image Server] Could not read capture time for {camera_id}: {e}")
+        _frame_log[camera_id] = entry
+        return
+
+    exif_time = _exif_time(source_path)
+    entry["captured_at"] = exif_time if exif_time is not None else file_time
+    if exif_time is not None:
+        offset = exif_time - file_time
+        entry["camera_clock_offset"] = round(offset, 1)
+        if abs(offset) > CLOCK_SKEW_WARN_SECONDS:
+            if camera_id not in _skewed_cameras:
+                print(f"[Image Server] {camera_id}: camera clock is {offset:+.0f}s off from this server "
+                      f"(EXIF vs file time). Its timestamps are informational only; check the camera's time settings.")
+                _skewed_cameras.add(camera_id)
+        else:
+            _skewed_cameras.discard(camera_id)
+    _frame_log[camera_id] = entry
+
+
+def _save_frame_log() -> None:
+    try:
+        save_frame_log(_frame_log)
+    except OSError as e:
+        print(f"[Image Server] Could not persist frame timestamps: {e}")
 
 
 def _camera_id_from_path(image_path: str) -> str:
     """Extract camera ID from filename (format: CAM_anynamehere.jpg)"""
     filename = os.path.basename(image_path)
-    stem = os.path.splitext(filename)[0]
-    
-    # Check if it starts with CAM_
-    if stem.startswith("CAM_"):
-        return stem  # Return full name including CAM_ prefix
-    
-    # Fallback for files not following the convention
-    return stem
+    return os.path.splitext(filename)[0]
 
 
 def _parse_ready_filename(filename: str):
@@ -138,8 +211,8 @@ def _remove_existing_ready_file(camera_id: str) -> None:
             if cid == camera_id:
                 try:
                     os.remove(os.path.join(IMAGE_READY_DIR, entry))
-                except OSError:
-                    pass
+                except OSError as exc:
+                    print(f"[Image Server] Unable to remove old file '{entry}': {exc}")
         else:
             parsed = _parse_ready_filename(entry)
             if parsed and parsed[0] == camera_id:
@@ -150,6 +223,8 @@ def _remove_existing_ready_file(camera_id: str) -> None:
 
 
 def _cleanup_stale_ready_files(valid_camera_ids: set) -> None:
+    for cid in [c for c in _frame_log if c not in valid_camera_ids]:
+        del _frame_log[cid]
     if not os.path.exists(IMAGE_READY_DIR):
         return
     for entry in os.listdir(IMAGE_READY_DIR):
@@ -158,8 +233,8 @@ def _cleanup_stale_ready_files(valid_camera_ids: set) -> None:
             if cid not in valid_camera_ids:
                 try:
                     os.remove(os.path.join(IMAGE_READY_DIR, entry))
-                except OSError:
-                    pass
+                except OSError as exc:
+                    print(f"[Image Server] Unable to remove stale file '{entry}': {exc}")
         else:
             parsed = _parse_ready_filename(entry)
             if parsed:
@@ -171,23 +246,26 @@ def _cleanup_stale_ready_files(valid_camera_ids: set) -> None:
                         print(f"[Image Server] Unable to remove stale file '{entry}': {exc}")
 
 
-def _write_ready_image(source_path: str, camera_id: str, status: str, bboxes: list) -> None:
-    _, ext = os.path.splitext(source_path)
-    ext = ext.lower() or ".jpg"
-    if ext not in {".jpg", ".jpeg", ".png"}:
-        ext = ".jpg"
+def _write_ready_image(source_path: str, camera_id: str, status: str, bboxes: list) -> bool:
+    """Publish a tagged frame to images_ready. Returns False (leaving the old files intact) on failure."""
     destination_name = f"{camera_id}_{status}.jpg"
     destination_path = os.path.join(IMAGE_READY_DIR, destination_name)
     bbox_path = os.path.join(IMAGE_READY_DIR, f"{camera_id}_bboxes.json")
-
-    _remove_existing_ready_file(camera_id)
+    tmp_image_path = destination_path + ".tmp"
 
     try:
-        shutil.copy2(source_path, destination_path)  # Changed from shutil.move to shutil.copy2
+        # Stage the new frame first so a failed copy doesn't wipe the camera's current status
+        shutil.copy2(source_path, tmp_image_path)
+        _remove_existing_ready_file(camera_id)
+        os.replace(tmp_image_path, destination_path)
         with open(bbox_path, 'w') as f:
             json.dump(bboxes, f)
-    except Exception as exc:
-        print(f"[Image Server] Failed to copy '{source_path}' to ready dir: {exc}")
+        return True
+    except OSError as exc:
+        print(f"[Image Server] Failed to publish '{source_path}' to ready dir: {exc}")
+        if os.path.exists(tmp_image_path):
+            os.remove(tmp_image_path)
+        return False
 
 
 def _list_source_images() -> List[str]:
@@ -228,6 +306,7 @@ def capture_and_update_images():
     _cleanup_stale_ready_files(valid_cids)
 
     if not all_image_files:
+        _save_frame_log()
         return
 
     # Process in batches
@@ -244,11 +323,10 @@ def capture_and_update_images():
         # Create new files in 'ready', keep originals in 'src'
         for img_path, (status, bboxes) in detection_results.items():
             camera_id = _camera_id_from_path(img_path)
-            status_token = status.upper()
-            if status_token not in {"YES", "NO"}:
-                status_token = "NO"
-            _write_ready_image(img_path, camera_id, status_token, bboxes)
-            print(f"[Image Server] Updated camera '{camera_id}' with status {status_token}.")
+            if _write_ready_image(img_path, camera_id, status, bboxes):
+                _record_frame(camera_id, img_path)
+                print(f"[Image Server] Updated camera '{camera_id}' with status {status}.")
+        _save_frame_log()
 
 
 def process_force_requests():
@@ -290,16 +368,15 @@ def process_force_requests():
 
         detection_result = detect_person_in_batch([source_image_path])
         res = detection_result.get(source_image_path)
-        if res:
-            status, bboxes = res
-        else:
-            status, bboxes = "NO", []
-            
-        status = status.upper()
-        if status not in {"YES", "NO"}:
-            status = "NO"
+        if not res:
+            print(f"[Image Server] Detection failed for {cam_id}; keeping its previous status and not signalling force_served.")
+            continue
+        status, bboxes = res
 
-        _write_ready_image(source_image_path, cam_id, status, bboxes)
+        if not _write_ready_image(source_image_path, cam_id, status, bboxes):
+            continue
+        _record_frame(cam_id, source_image_path)
+        _save_frame_log()
         append_message(FORCE_SERVED_FEED, f"FORCE_SERVED_{cam_id}")
         print(f"[Image Server] Served force update for {cam_id}, status: {status}")
 

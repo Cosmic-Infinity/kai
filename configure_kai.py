@@ -2,14 +2,19 @@ import os
 import sys
 import subprocess
 import getpass
-import json
 import ctypes
 import platform
+import shutil
+import tempfile
 import time
+import traceback
 
 # Add modules/ directory to import path for runtime and static IDE resolution
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "modules"))
 from modules.config_manager import load_config, save_config
+
+SYSTEM = platform.system()  # 'Windows', 'Linux' or 'Darwin'
+
 
 class Colors:
     HEADER = '\033[95m'
@@ -38,7 +43,7 @@ def safe_print(text, color_code=None):
         text_clean = ansi_escape.sub('', text)
         replacements = {
             "╔": "+", "═": "-", "╗": "+",
-            "╠": "+", "╩": "+", "╝": "+",
+            "╠": "+", "╣": "+", "╩": "+", "╝": "+",
             "╚": "+", "║": "|", "╬": "+",
             "▲": "^", "▼": "v", "■": "*",
             "•": "*", "┌": "+", "┐": "+",
@@ -47,10 +52,7 @@ def safe_print(text, color_code=None):
         }
         for char, repl in replacements.items():
             text_clean = text_clean.replace(char, repl)
-        try:
-            print(text_clean.encode('ascii', 'ignore').decode('ascii'))
-        except:
-            pass
+        print(text_clean.encode('ascii', 'replace').decode('ascii'))
 
 def ensure_production_secrets(config):
     """Ensure all required production secrets and usernames exist in config."""
@@ -86,200 +88,215 @@ def ensure_production_secrets(config):
             
     return changed
 
-def get_short_path(long_path):
-    """Get the 8.3 short path version of a long path on Windows."""
-    import ctypes
-    
-    if platform.system() != 'Windows':
-        return long_path
-        
-    try:
-        buf = ctypes.create_unicode_buffer(260)
-        res = ctypes.windll.kernel32.GetShortPathNameW(long_path, buf, 260)
-        if res > 0:
-            return buf.value
-    except:
-        pass
-    
-    return long_path.replace("C:\\Program Files", "C:\\PROGRA~1")
-
 def is_admin():
-    """Check if the script is running with administrative privileges."""
-    if platform.system() != 'Windows':
-        return os.getuid() == 0
-    try:
-        return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
-        return False
+    """Check if the script is running with administrative (root) privileges."""
+    if SYSTEM == 'Windows':
+        try:
+            return bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except (AttributeError, OSError) as e:
+            print(colored(f"[WARN] Could not determine administrator status: {e}", Colors.YELLOW))
+            return False
+    return os.geteuid() == 0
+
+def needs_elevation():
+    """Windows (service control) and Linux (/etc/mosquitto, systemd) need admin rights; Homebrew on macOS does not."""
+    return SYSTEM in ('Windows', 'Linux')
 
 def elevate_privileges():
-    """Relaunch the script with Administrator privileges on Windows."""
-    if is_admin():
+    """Make sure we have the rights to manage Mosquitto, relaunching as Administrator on Windows."""
+    if not needs_elevation() or is_admin():
         return True
-    
-    if platform.system() == 'Windows':
+
+    if SYSTEM == 'Windows':
         print(colored("Privilege Elevation Required to manage Mosquitto Windows service...", Colors.YELLOW))
         print("A User Account Control (UAC) prompt will appear shortly. Please approve it.")
         time.sleep(1.5)
         # Relaunch script as admin
-        ctypes.windll.shell32.ShellExecuteW(
-            None, "runas", sys.executable, " ".join(sys.argv), None, 1
+        result = ctypes.windll.shell32.ShellExecuteW(
+            None, "runas", sys.executable, subprocess.list2cmdline(sys.argv), None, 1
         )
+        if result <= 32:  # ShellExecute reports failure with values <= 32
+            print(colored(f"[FAIL] Could not relaunch with administrator rights (ShellExecute code {result}).", Colors.RED))
+            sys.exit(1)
         sys.exit(0)
     else:
         print(colored("[FAIL] This script must be run as root. Please run using: sudo python configure_kai.py", Colors.RED))
         sys.exit(1)
 
+class MosquittoEnv:
+    """Where Mosquitto lives on this OS and how to control its service."""
+
+    def __init__(self):
+        if SYSTEM == 'Windows':
+            self.config_dir = r"C:\Program Files\mosquitto"
+            self.passwd_tool = "mosquitto_passwd.exe"
+            self.install_hint = "choco install mosquitto  (or download from https://mosquitto.org/download/)"
+        elif SYSTEM == 'Darwin':
+            candidates = ["/opt/homebrew/etc/mosquitto", "/usr/local/etc/mosquitto"]
+            self.config_dir = next((d for d in candidates if os.path.isdir(d)), candidates[0])
+            self.passwd_tool = "mosquitto_passwd"
+            self.install_hint = "brew install mosquitto"
+        else:
+            self.config_dir = "/etc/mosquitto"
+            self.passwd_tool = "mosquitto_passwd"
+            self.install_hint = "sudo apt install mosquitto mosquitto-clients  (or your distribution's equivalent)"
+        self.passwd_path = os.path.join(self.config_dir, "passwd")
+        self.acl_path = os.path.join(self.config_dir, "acl")
+        self.conf_path = os.path.join(self.config_dir, "mosquitto.conf")
+
+    def find_passwd_tool(self):
+        bundled = os.path.join(self.config_dir, self.passwd_tool)
+        return bundled if os.path.exists(bundled) else shutil.which(self.passwd_tool)
+
+    def service(self, action):
+        """Run 'stop' or 'start' on the Mosquitto service ('start' restarts it on Linux/macOS so new config is loaded)."""
+        if SYSTEM == 'Windows':
+            cmd = ["net", action, "mosquitto"]
+        elif SYSTEM == 'Darwin':
+            cmd = ["brew", "services", "restart" if action == "start" else action, "mosquitto"]
+        else:
+            cmd = ["systemctl", "restart" if action == "start" else action, "mosquitto"]
+        return subprocess.run(cmd, capture_output=True, text=True)
+
+    def secure_file(self, path):
+        """Restrict a credentials file so only the broker (and admins) can read it."""
+        if SYSTEM == 'Windows':
+            res = subprocess.run(["icacls", path, "/reset"], capture_output=True, text=True)
+            if res.returncode != 0:
+                print(colored(f"[WARN] Could not reset permissions on {path}: {(res.stderr or res.stdout).strip()}", Colors.YELLOW))
+            return
+        try:
+            if SYSTEM == 'Linux':
+                os.chmod(path, 0o640)
+                try:
+                    shutil.chown(path, user="mosquitto", group="mosquitto")
+                except LookupError:
+                    print(colored(f"[WARN] No 'mosquitto' account found; make sure the broker can read {path}.", Colors.YELLOW))
+            else:
+                os.chmod(path, 0o600)
+        except OSError as e:
+            print(colored(f"[WARN] Could not set permissions on {path}: {e}", Colors.YELLOW))
+
+def create_password_file(env, passwd_tool, users):
+    """Create the Mosquitto password file. users is a list of (label, username, password); the first one creates the file."""
+    for index, (label, user, password) in enumerate(users):
+        cmd = [passwd_tool] + (["-c"] if index == 0 else []) + ["-b", env.passwd_path, user, password]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode != 0:
+            print(colored(f"[FAIL] Failed to create {label} user: {(res.stderr or res.stdout).strip()}", Colors.RED))
+            return False
+        print(colored(f"[OK] {label} user '{user}' created successfully.", Colors.GREEN))
+    return True
+
 def configure_mosquitto_broker(config):
     """Configure local Mosquitto MQTT broker with auth credentials."""
     print(colored("\n--- Configuring Mosquitto MQTT Broker ---", Colors.CYAN))
-    
-    if platform.system() != 'Windows':
-        print(colored("[INFO] Non-Windows OS detected. Please configure your Mosquitto auth manually.", Colors.YELLOW))
-        return True
 
-    mosquitto_dir = r"C:\Program Files\mosquitto"
-    if not os.path.exists(mosquitto_dir):
-        print(colored(f"[WARN] Mosquitto directory not found at: {mosquitto_dir}", Colors.YELLOW))
-        print(colored("Please ensure Mosquitto Broker is installed and update passwd file manually.", Colors.YELLOW))
+    env = MosquittoEnv()
+    if not os.path.isdir(env.config_dir):
+        print(colored(f"[WARN] Mosquitto directory not found at: {env.config_dir}", Colors.YELLOW))
+        print(colored(f"Please install Mosquitto first: {env.install_hint}", Colors.YELLOW))
         return False
-        
-    orig_dir = os.getcwd()
+
+    passwd_tool = env.find_passwd_tool()
+    if not passwd_tool:
+        print(colored(f"[FAIL] '{env.passwd_tool}' not found. Install the Mosquitto client tools: {env.install_hint}", Colors.RED))
+        return False
+
     try:
         print("[1/5] Stopping Mosquitto Broker service to release file locks...")
-        os.chdir(mosquitto_dir)
-        subprocess.run(["net", "stop", "mosquitto"], capture_output=True)
-        
+        try:
+            res = env.service("stop")
+            if res.returncode != 0:
+                print(colored(f"[WARN] Could not stop the service (it may not be running): {(res.stderr or res.stdout).strip()}", Colors.YELLOW))
+        except OSError as e:
+            print(colored(f"[WARN] Could not stop the Mosquitto service: {e}", Colors.YELLOW))
+
         is_dev_mode = config.get("DEV_MODE", False)
         if not is_dev_mode:
             if ensure_production_secrets(config):
                 print(colored("[INFO] Populated missing secure production isolated server keys.", Colors.CYAN))
                 save_config(config)
-        
+
         print("[2/5] Creating password file...")
-        passwd_path = "passwd"
-        if os.path.exists(passwd_path):
+        if os.path.exists(env.passwd_path):
             try:
-                os.remove(passwd_path)
-            except Exception as e:
+                os.remove(env.passwd_path)
+            except OSError as e:
                 print(colored(f"[WARN] Failed to delete existing passwd file: {e}", Colors.YELLOW))
-                
+
         if is_dev_mode:
             # Dev Mode - Single shared user (UNSAFE)
             username = config.get("MQTT_USERNAME", "kai_admin")
             password = config.get("MQTT_PASSWORD", "kai")
-            
-            res = subprocess.run(["mosquitto_passwd.exe", "-c", "-b", "passwd", username, password], capture_output=True, text=True)
-            if res.returncode == 0:
-                print(colored(f"[OK] Dev Admin user '{username}' created successfully.", Colors.GREEN))
-                
-                # Write the Access Control List (ACL) file
-                acl_content = (
-                    "# =================================================================\n"
-                    "# kai System Access Control Lists (DEVELOPER UNSAFE MODE)\n"
-                    "# =================================================================\n\n"
-                    f"user {username}\n"
-                    "topic readwrite kai/power\n"
-                    "topic readwrite kai/control\n"
-                    "topic readwrite kai/force_request\n"
-                    "topic readwrite kai/force_served\n"
-                )
-                with open("acl", "w", encoding="utf-8") as f:
-                    f.write(acl_content)
-                print(colored("[WARN] Dev Mode ACL rules generated (UNSAFE).", Colors.YELLOW))
-                subprocess.run(["icacls", "passwd", "/reset"], capture_output=True)
-                subprocess.run(["icacls", "acl", "/reset"], capture_output=True)
-            else:
-                print(colored(f"[FAIL] Failed to create password file: {res.stderr}", Colors.RED))
-                return False
+            users = [("Dev Admin", username, password)]
+            acl_content = (
+                "# =================================================================\n"
+                "# kai System Access Control Lists (DEVELOPER UNSAFE MODE)\n"
+                "# =================================================================\n\n"
+                f"user {username}\n"
+                "topic readwrite kai/power\n"
+                "topic readwrite kai/control\n"
+                "topic readwrite kai/force_request\n"
+                "topic readwrite kai/force_served\n"
+            )
         else:
             # Production Mode - Multiple Isolated Users
             dash_user = config.get("MQTT_USERNAME", "kai_dashboard")
-            dash_pass = config.get("MQTT_PASSWORD")
-            
             img_user = config.get("MQTT_USER_IMAGE_SERVER", "kai_image_server")
-            img_pass = config.get("MQTT_PASSWORD_IMAGE_SERVER")
-            
             ctrl_user = config.get("MQTT_USER_CONTROL_SERVER", "kai_control_server")
-            ctrl_pass = config.get("MQTT_PASSWORD_CONTROL_SERVER")
-            
             mon_user = config.get("MQTT_USER_MONITOR", "kai_monitor")
-            mon_pass = config.get("MQTT_PASSWORD_MONITOR")
-            
             pow_user = config.get("MQTT_USER_POWER_FEED", "kai_edge_device")
-            pow_pass = config.get("MQTT_PASSWORD_POWER_FEED")
-            
-            # Create database and add dashboard user
-            res = subprocess.run(["mosquitto_passwd.exe", "-c", "-b", "passwd", dash_user, dash_pass], capture_output=True, text=True)
-            if res.returncode == 0:
-                print(colored(f"[OK] Dashboard user '{dash_user}' created successfully.", Colors.GREEN))
-                
-                # Append internal users with strict return code verification
-                res = subprocess.run(["mosquitto_passwd.exe", "-b", "passwd", img_user, img_pass], capture_output=True, text=True)
-                if res.returncode != 0:
-                    print(colored(f"[FAIL] Failed to create Image Server user: {res.stderr}", Colors.RED))
-                    return False
-                print(colored(f"[OK] Image Server user '{img_user}' created successfully.", Colors.GREEN))
-                
-                res = subprocess.run(["mosquitto_passwd.exe", "-b", "passwd", ctrl_user, ctrl_pass], capture_output=True, text=True)
-                if res.returncode != 0:
-                    print(colored(f"[FAIL] Failed to create Control Server user: {res.stderr}", Colors.RED))
-                    return False
-                print(colored(f"[OK] Control Server user '{ctrl_user}' created successfully.", Colors.GREEN))
-                
-                res = subprocess.run(["mosquitto_passwd.exe", "-b", "passwd", mon_user, mon_pass], capture_output=True, text=True)
-                if res.returncode != 0:
-                    print(colored(f"[FAIL] Failed to create Traffic Monitor user: {res.stderr}", Colors.RED))
-                    return False
-                print(colored(f"[OK] Traffic Monitor user '{mon_user}' created successfully.", Colors.GREEN))
-                
-                res = subprocess.run(["mosquitto_passwd.exe", "-b", "passwd", pow_user, pow_pass], capture_output=True, text=True)
-                if res.returncode != 0:
-                    print(colored(f"[FAIL] Failed to create Connected Devices (Power Feed) user: {res.stderr}", Colors.RED))
-                    return False
-                print(colored(f"[OK] Connected Devices (Power Feed) user '{pow_user}' created successfully.", Colors.GREEN))
-                
-                # Write the Access Control List (ACL) file
-                acl_content = (
-                    "# =================================================================\n"
-                    "# kai System Access Control Lists (PRODUCTION ISOLATED MODE)\n"
-                    "# =================================================================\n\n"
-                    f"user {img_user}\n"
-                    "topic read kai/force_request\n"
-                    "topic write kai/force_served\n\n"
-                    f"user {ctrl_user}\n"
-                    "topic read kai/control\n"
-                    "topic write kai/power\n\n"
-                    f"user {pow_user}\n"
-                    "topic read kai/power\n\n"
-                    f"user {mon_user}\n"
-                    "topic read kai/#\n\n"
-                    f"user {dash_user}\n"
-                    "topic read kai/power\n"
-                    "topic read kai/force_served\n"
-                    "topic write kai/control\n"
-                    "topic write kai/force_request\n"
-                )
-                with open("acl", "w", encoding="utf-8") as f:
-                    f.write(acl_content)
-                print(colored("[OK] Strict production isolated ACL rules generated.", Colors.GREEN))
-                subprocess.run(["icacls", "passwd", "/reset"], capture_output=True)
-                subprocess.run(["icacls", "acl", "/reset"], capture_output=True)
-            else:
-                print(colored(f"[FAIL] Failed to create password file: {res.stderr}", Colors.RED))
-                return False
-            
-        print("[3/5] Updating mosquitto.conf...")
-        conf_path = "mosquitto.conf"
-        if not os.path.exists(conf_path):
-            print(colored("[FAIL] mosquitto.conf not found!", Colors.RED))
+            users = [
+                ("Dashboard", dash_user, config.get("MQTT_PASSWORD")),
+                ("Image Server", img_user, config.get("MQTT_PASSWORD_IMAGE_SERVER")),
+                ("Control Server", ctrl_user, config.get("MQTT_PASSWORD_CONTROL_SERVER")),
+                ("Traffic Monitor", mon_user, config.get("MQTT_PASSWORD_MONITOR")),
+                ("Connected Devices (Power Feed)", pow_user, config.get("MQTT_PASSWORD_POWER_FEED")),
+            ]
+            acl_content = (
+                "# =================================================================\n"
+                "# kai System Access Control Lists (PRODUCTION ISOLATED MODE)\n"
+                "# =================================================================\n\n"
+                f"user {img_user}\n"
+                "topic read kai/force_request\n"
+                "topic write kai/force_served\n\n"
+                f"user {ctrl_user}\n"
+                "topic read kai/control\n"
+                "topic write kai/power\n\n"
+                f"user {pow_user}\n"
+                "topic read kai/power\n\n"
+                f"user {mon_user}\n"
+                "topic read kai/#\n\n"
+                f"user {dash_user}\n"
+                "topic read kai/power\n"
+                "topic read kai/force_served\n"
+                "topic write kai/control\n"
+                "topic write kai/force_request\n"
+            )
+
+        if not create_password_file(env, passwd_tool, users):
             return False
-            
-        with open(conf_path, "r", encoding="utf-8", errors="ignore") as f:
+
+        with open(env.acl_path, "w", encoding="utf-8") as f:
+            f.write(acl_content)
+        if is_dev_mode:
+            print(colored("[WARN] Dev Mode ACL rules generated (UNSAFE).", Colors.YELLOW))
+        else:
+            print(colored("[OK] Strict production isolated ACL rules generated.", Colors.GREEN))
+        env.secure_file(env.passwd_path)
+        env.secure_file(env.acl_path)
+
+        print("[3/5] Updating mosquitto.conf...")
+        if not os.path.exists(env.conf_path):
+            print(colored(f"[FAIL] {env.conf_path} not found!", Colors.RED))
+            return False
+
+        with open(env.conf_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
-            
+
         custom_config_header = "# =================================================================\n# kai Dashboard System custom configuration"
-        
+
         # Clean up any old custom configuration block entirely to prevent duplicate appends
         if custom_config_header in content:
             print(colored("[OK] Custom kai configuration listener found. Rewriting it cleanly...", Colors.GREEN))
@@ -288,7 +305,7 @@ def configure_mosquitto_broker(config):
         else:
             print("Appending custom listener configuration to mosquitto.conf...")
             content = content.strip()
-            
+
         # Clean any legacy kai configuration lines written outside the block, if any
         lines_clean = []
         for line in content.splitlines():
@@ -296,42 +313,43 @@ def configure_mosquitto_broker(config):
                 continue
             lines_clean.append(line)
         content = "\n".join(lines_clean).strip() + "\n\n"
-            
-        passwd_fwd_path = os.path.join(mosquitto_dir, "passwd").replace("\\", "/")
-        acl_fwd_path = os.path.join(mosquitto_dir, "acl").replace("\\", "/")
-        
+
+        # Forward slashes, no quotes: Mosquitto rejects quoted paths and handles '/' on every OS
+        passwd_conf_path = env.passwd_path.replace("\\", "/")
+        acl_conf_path = env.acl_path.replace("\\", "/")
+
         custom_config = (
             "# =================================================================\n"
             "# kai Dashboard System custom configuration\n"
             "# =================================================================\n"
             "listener 1883 0.0.0.0\n"
             "allow_anonymous false\n"
-            f"password_file {passwd_fwd_path}\n"
-            f"acl_file {acl_fwd_path}\n"
+            f"password_file {passwd_conf_path}\n"
+            f"acl_file {acl_conf_path}\n"
         )
         content += custom_config
-        print(colored("[OK] Custom listener and ACL configuration successfully written.", Colors.GREEN))
-            
-        with open(conf_path, "w", encoding="utf-8") as f:
+
+        with open(env.conf_path, "w", encoding="utf-8") as f:
             f.write(content)
-            
+        print(colored("[OK] Custom listener and ACL configuration successfully written.", Colors.GREEN))
+
         print("[4/5] Saving credentials to config.json SSoT...")
+        config.pop("_NOTICE", None)  # sample-credentials warning no longer applies
         save_config(config)
-        
+
         print("[5/5] Restarting Mosquitto Broker service...")
-        res = subprocess.run(["net", "start", "mosquitto"], capture_output=True, text=True)
-        if res.returncode != 0 and "has already been started" not in res.stderr and "has already been started" not in res.stdout:
-            print(colored(f"[FAIL] Mosquitto Broker failed to start: {res.stderr or res.stdout}", Colors.RED))
+        res = env.service("start")
+        output = f"{res.stderr}{res.stdout}"
+        if res.returncode != 0 and "has already been started" not in output:
+            print(colored(f"[FAIL] Mosquitto Broker failed to start: {output.strip()}", Colors.RED))
             return False
-            
+
         print(colored("[OK] Mosquitto Broker is running and secured.", Colors.GREEN))
         return True
-        
-    except Exception as e:
+
+    except (OSError, subprocess.SubprocessError) as e:
         print(colored(f"[FAIL] Error configuring Mosquitto: {e}", Colors.RED))
         return False
-    finally:
-        os.chdir(orig_dir)
 
 def show_credentials_card(host, port, username, password, api_key, edge_user=None, edge_pass=None, color=Colors.CYAN, title="kai SYSTEM CREDENTIALS"):
     """Render a premium formatted terminal card displaying credentials."""
@@ -359,7 +377,7 @@ def check_backend_running():
     try:
         requests.get("http://127.0.0.1:8000", timeout=1)
         return True
-    except:
+    except requests.RequestException:
         return False
 
 def warn_hot_swap():
@@ -720,19 +738,18 @@ def run_system_diagnostics():
     
     print(f"Checking HTTP API Server status at {api_url}...", end="", flush=True)
     import requests
-    import subprocess
-    import sys
-    
+
     api_proc = None
-    
+    api_log = tempfile.TemporaryFile(mode="w+")
+
     # Try connecting. If it fails, start the server temporarily.
     try:
         requests.get(api_url, timeout=1)
-    except:
+    except requests.RequestException:
         print(colored(" [OFFLINE]", Colors.YELLOW))
         print(colored("  Temporarily starting HTTP API server for diagnostics...", Colors.CYAN))
         api_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modules", "http_api.py")
-        api_proc = subprocess.Popen([sys.executable, api_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        api_proc = subprocess.Popen([sys.executable, api_script], stdout=api_log, stderr=subprocess.STDOUT)
         time.sleep(3)  # Give it a moment to boot
         print(f"Checking HTTP API Server status at {api_url} again...", end="", flush=True)
 
@@ -773,15 +790,23 @@ def run_system_diagnostics():
             
         print(colored(" [ONLINE]", Colors.GREEN))
         
-    except Exception as e:
+    except (requests.RequestException, ValueError) as e:
         print(colored(" [OFFLINE]", Colors.RED))
         api_results["API Server Status"] = ("FAIL", f"HTTP API Server is unreachable: {e}")
+        if api_proc:
+            api_proc.poll()
+            api_log.seek(0)
+            server_output = api_log.read().strip()
+            if server_output:
+                print(colored("  Output from the temporary HTTP API server:", Colors.YELLOW))
+                print("\n".join("    " + line for line in server_output.splitlines()[-15:]))
     finally:
         if api_proc:
             print(colored("  Shutting down temporary HTTP API server...", Colors.CYAN))
             api_proc.terminate()
             api_proc.wait()
-        
+        api_log.close()
+
     # Render Diagnostics Card
     card_width = 62
     safe_print("")
@@ -855,29 +880,33 @@ def main():
         print("5) Exit")
         
         choice = input("\nSelect an option (1-5): ").strip()
-        if choice == '1':
-            set_custom_credentials()
-        elif choice == '2':
-            reset_passwords()
-        elif choice == '3':
-            enable_test_mode()
-            # Pause to let the user see the keys before continuing
-            input("\nPress Enter to return to main menu...")
-        elif choice == '4':
-            run_system_diagnostics()
-        elif choice == '5':
-            print(colored("\nExiting kai Wizard. Goodbye!", Colors.GREEN))
-            break
-        else:
-            print(colored("\n[FAIL] Invalid choice. Please select from 1-5.", Colors.RED))
+        try:
+            if choice == '1':
+                set_custom_credentials()
+            elif choice == '2':
+                reset_passwords()
+            elif choice == '3':
+                enable_test_mode()
+                # Pause to let the user see the keys before continuing
+                input("\nPress Enter to return to main menu...")
+            elif choice == '4':
+                run_system_diagnostics()
+            elif choice == '5':
+                print(colored("\nExiting kai Wizard. Goodbye!", Colors.GREEN))
+                break
+            else:
+                print(colored("\n[FAIL] Invalid choice. Please select from 1-5.", Colors.RED))
+        except Exception as e:
+            print(colored(f"\n[FAIL] Unexpected error: {e}", Colors.RED + Colors.BOLD))
+            print(colored(traceback.format_exc(), Colors.RED))
 
 if __name__ == "__main__":
     # Ensure terminal has ANSI escape sequences active
-    if platform.system() == 'Windows':
+    if SYSTEM == 'Windows':
         os.system('')
     
     # Prompt before UAC elevation to ensure non-intrusive flow
-    if not is_admin():
+    if needs_elevation() and not is_admin() and SYSTEM == 'Windows':
         print_banner("kai SYSTEM CONFIGURATION WIZARD")
         print(colored("\n[INFO] Setting up the kai System requires administrative privileges.", Colors.YELLOW))
         print("This is necessary to install/start the Mosquitto MQTT broker Windows service,")
@@ -887,7 +916,7 @@ if __name__ == "__main__":
         if response == 'n':
             print(colored("\nSetup cancelled. Administrative privileges are required to configure kai.", Colors.RED))
             sys.exit(0)
-            
+
     # Elevate privileges and launch menu
     elevate_privileges()
     main()

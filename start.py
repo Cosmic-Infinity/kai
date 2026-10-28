@@ -8,9 +8,22 @@ It provides a convenient single-command startup for the entire system.
 import os
 import sys
 import platform
+import shlex
+import shutil
 import subprocess
 import time
 from pathlib import Path
+
+# Always resolve paths from the project root, no matter where the launcher is started from
+PROJECT_ROOT = Path(__file__).resolve().parent
+LOG_DIR = PROJECT_ROOT / "logs"
+
+# Never crash on a console that can't encode the banner/box characters (e.g. redirected output)
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="replace")
+    except AttributeError:
+        pass
 
 
 # Color codes for terminal output
@@ -36,6 +49,16 @@ def print_banner():
     print(colored("[kai] IoT System Launcher", Colors.HEADER + Colors.BOLD))
     print(colored("=" * 70, Colors.CYAN))
     print()
+
+
+def broker_start_hint():
+    """Return the OS-appropriate command to start the Mosquitto service."""
+    system = platform.system()
+    if system == 'Windows':
+        return "net start mosquitto (Administrator shell)"
+    if system == 'Darwin':
+        return "brew services start mosquitto"
+    return "sudo systemctl start mosquitto"
 
 
 def check_python():
@@ -96,16 +119,25 @@ def check_mqtt_broker():
         return False
     except Exception as e:
         print(colored(f"[FAIL] MQTT broker not reachable: {e}", Colors.RED))
-        print(colored("  Run: net start mosquitto", Colors.YELLOW))
+        print(colored(f"  Start the broker with: {broker_start_hint()}", Colors.YELLOW))
         return False
+
+
+def check_sample_credentials():
+    """Warn (without failing the pre-flight) while config.json still carries the shipped demo credentials."""
+    from modules.config_manager import load_config
+    notice = load_config().get("_NOTICE")
+    if notice:
+        print(colored("[WARN] config/config.json still contains the SAMPLE credentials shipped with the repository.", Colors.YELLOW))
+        print(colored("  Run `python configure_kai.py` to generate your own before a real deployment.", Colors.YELLOW))
 
 
 def check_directories():
     """Verify required directories exist."""
     dirs = {
-        "modules": Path("modules"),
-        "images_src": Path("images_src"),
-        "images_ready": Path("images_ready"),
+        "modules": PROJECT_ROOT / "modules",
+        "images_src": PROJECT_ROOT / "images_src",
+        "images_ready": PROJECT_ROOT / "images_ready",
     }
     
     all_exist = True
@@ -122,76 +154,96 @@ def check_directories():
     return all_exist
 
 
-def launch_windows(modules):
-    """Launch modules in separate PowerShell windows on Windows."""
-    processes = []
-    
-    for module in modules:
-        name, script, title = module['name'], module['script'], module['title']
-        
-        try:
-            # PowerShell command to run the script with a custom title
-            cmd = [
-                'powershell.exe',
-                '-NoExit',
-                '-Command',
-                f'$host.UI.RawUI.WindowTitle = "{title}"; python {script}'
-            ]
-            
-            # Start new PowerShell window
-            process = subprocess.Popen(
-                cmd,
-                creationflags=subprocess.CREATE_NEW_CONSOLE,
-                cwd=os.getcwd()
-            )
-            processes.append(process)
-            print(colored(f"[OK] Launched {name}", Colors.GREEN))
-            time.sleep(0.5)  # Stagger launches
-            
-        except Exception as e:
-            print(colored(f"[FAIL] Failed to launch {name}: {e}", Colors.RED))
-    
-    return processes
+def _ps_quote(text):
+    """Quote a string for a PowerShell single-quoted literal."""
+    return "'" + str(text).replace("'", "''") + "'"
 
 
-def launch_unix(modules):
-    """Launch modules in separate terminal windows on Linux/Mac."""
-    processes = []
-    
-    # Detect available terminal emulator
-    terminals = [
-        ('gnome-terminal', ['gnome-terminal', '--', 'bash', '-c']),
-        ('xterm', ['xterm', '-hold', '-e']),
-        ('konsole', ['konsole', '-e']),
-        ('Terminal', ['open', '-a', 'Terminal']),  # macOS
+def _shell_command(module):
+    """POSIX shell command line that runs a module from the project root."""
+    return (
+        f"printf '\\033]0;%s\\007' {shlex.quote(module['title'])}; "
+        f"cd {shlex.quote(str(PROJECT_ROOT))} && "
+        f"{shlex.quote(sys.executable)} {shlex.quote(module['script'])}"
+    )
+
+
+def _applescript_quote(text):
+    return '"' + text.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+
+def _linux_terminal_argv(module):
+    """Build argv that opens a terminal window running the module, or None if no terminal/display is available."""
+    if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        return None
+    shell_cmd = _shell_command(module) + "; exec bash"
+    title = module['title']
+    candidates = [
+        ('gnome-terminal', ['gnome-terminal', f'--title={title}', '--', 'bash', '-c', shell_cmd]),
+        ('konsole', ['konsole', '-e', 'bash', '-c', shell_cmd]),
+        ('xfce4-terminal', ['xfce4-terminal', '--title', title, '-x', 'bash', '-c', shell_cmd]),
+        ('xterm', ['xterm', '-T', title, '-hold', '-e', 'bash', '-c', shell_cmd]),
     ]
-    
-    terminal_cmd = None
-    for term_name, term_cmd in terminals:
-        try:
-            subprocess.run(['which', term_name], capture_output=True, check=True)
-            terminal_cmd = term_cmd
-            break
-        except:
-            continue
-    
-    if not terminal_cmd:
-        print(colored("[FAIL] No suitable terminal emulator found", Colors.RED))
-        return processes
-    
+    for exe, argv in candidates:
+        if shutil.which(exe):
+            return argv
+    return None
+
+
+def launch_background(module):
+    """Run a module detached with its output in logs/<name>.log (no terminal available, e.g. headless server)."""
+    LOG_DIR.mkdir(exist_ok=True)
+    log_name = module['script'].replace(os.sep, '_').replace('.py', '') + '.log'
+    log_path = LOG_DIR / log_name
+    with open(log_path, 'ab') as log_file:
+        process = subprocess.Popen(
+            [sys.executable, module['script']],
+            cwd=PROJECT_ROOT,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            start_new_session=(os.name != 'nt'),
+        )
+    print(colored(f"  Output: {log_path} (PID {process.pid})", Colors.CYAN))
+    return process
+
+
+def launch_module(module):
+    """Open a module in its own terminal window using whatever the current OS provides."""
+    system = platform.system()
+
+    if system == 'Windows':
+        command = (
+            f"$host.UI.RawUI.WindowTitle = {_ps_quote(module['title'])}; "
+            f"& {_ps_quote(sys.executable)} {_ps_quote(module['script'])}"
+        )
+        return subprocess.Popen(
+            ['powershell.exe', '-NoExit', '-Command', command],
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+            cwd=PROJECT_ROOT,
+        )
+
+    if system == 'Darwin':
+        script = f'tell application "Terminal" to do script {_applescript_quote(_shell_command(module))}'
+        return subprocess.Popen(['osascript', '-e', script, '-e', 'tell application "Terminal" to activate'])
+
+    argv = _linux_terminal_argv(module)
+    if argv:
+        return subprocess.Popen(argv, cwd=PROJECT_ROOT)
+
+    print(colored("  No graphical terminal found - running in the background instead.", Colors.YELLOW))
+    return launch_background(module)
+
+
+def launch_modules(modules):
+    """Launch every module, reporting (not hiding) any that fail to start."""
+    processes = []
     for module in modules:
-        name, script, title = module['name'], module['script'], module['title']
-        
         try:
-            cmd = terminal_cmd + [f'python {script}; exec bash']
-            process = subprocess.Popen(cmd, cwd=os.getcwd())
-            processes.append(process)
-            print(colored(f"[OK] Launched {name}", Colors.GREEN))
-            time.sleep(0.5)
-            
-        except Exception as e:
-            print(colored(f"[FAIL] Failed to launch {name}: {e}", Colors.RED))
-    
+            processes.append(launch_module(module))
+            print(colored(f"[OK] Launched {module['name']}", Colors.GREEN))
+            time.sleep(0.5)  # Stagger launches
+        except OSError as e:
+            print(colored(f"[FAIL] Failed to launch {module['name']}: {e}", Colors.RED))
     return processes
 
 
@@ -207,7 +259,8 @@ def main():
     checks_passed &= check_python()
     checks_passed &= check_directories()
     checks_passed &= check_mqtt_broker()
-    
+    check_sample_credentials()
+
     print()
     
     if not checks_passed:
@@ -222,22 +275,22 @@ def main():
     modules = [
         {
             'name': 'Image Server',
-            'script': 'modules\\image_server.py' if platform.system() == 'Windows' else 'modules/image_server.py',
+            'script': os.path.join('modules', 'image_server.py'),
             'title': 'kai - Image Server'
         },
         {
             'name': 'Control Server',
-            'script': 'modules\\control_server.py' if platform.system() == 'Windows' else 'modules/control_server.py',
+            'script': os.path.join('modules', 'control_server.py'),
             'title': 'kai - Control Server'
         },
         {
             'name': 'MQTT Monitor',
-            'script': 'tools\\monitor_mqtt.py' if platform.system() == 'Windows' else 'tools/monitor_mqtt.py',
+            'script': os.path.join('tools', 'monitor_mqtt.py'),
             'title': 'kai - MQTT Monitor'
         },
         {
             'name': 'HTTP API Server',
-            'script': 'modules\\http_api.py' if platform.system() == 'Windows' else 'modules/http_api.py',
+            'script': os.path.join('modules', 'http_api.py'),
             'title': 'kai - HTTP API'
         },
     ]
@@ -246,10 +299,7 @@ def main():
     print(colored("Launching modules...", Colors.CYAN))
     print()
     
-    if platform.system() == 'Windows':
-        processes = launch_windows(modules)
-    else:
-        processes = launch_unix(modules)
+    processes = launch_modules(modules)
     
     print()
     print(colored("=" * 70, Colors.CYAN))

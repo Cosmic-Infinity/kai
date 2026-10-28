@@ -1,4 +1,7 @@
+import atexit
 import os
+import re
+import signal
 import sys
 import time
 import json
@@ -34,6 +37,8 @@ if os.path.basename(SCRIPT_DIR) in ["tools", "scratch"]:
 else:
     PROJECT_ROOT = SCRIPT_DIR
 CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "config.json")
+sys.path.insert(0, PROJECT_ROOT)
+from modules.config_manager import atomic_write_json
 
 def load_config():
     with open(CONFIG_PATH, "r") as f:
@@ -55,6 +60,35 @@ print(f"Target HTTP API:     http://127.0.0.1:8000")
 print(f"Dashboard User:      '{dashboard_user}'")
 print("==============================================================\n")
 
+print(colored("NOTICE - please read before continuing:", Colors.YELLOW + Colors.BOLD))
+print(colored("  * This audit STOPS whatever is listening on port 8000 (the kai HTTP API) so it can test a fresh instance.", Colors.YELLOW))
+print(colored("    A new HTTP API window is started when the audit ends; close your old HTTP API window and restart any", Colors.YELLOW))
+print(colored("    other process you had on that port. Dashboards lose their connection to the API in the meantime.", Colors.YELLOW))
+print(colored("  * It briefly changes DASHBOARD_INTERVAL in config.json to prove updates work, then restores config.json.", Colors.YELLOW))
+print()
+if "--yes" not in sys.argv and "-y" not in sys.argv:
+    if not sys.stdin.isatty():
+        sys.exit("Refusing to run non-interactively without --yes.")
+    if input("Continue? (y/N): ").strip().lower() != "y":
+        sys.exit("Audit cancelled.")
+    print()
+
+# Snapshot config.json so anything the audit changes is put back, even if the run is interrupted
+with open(CONFIG_PATH, "r") as f:
+    CONFIG_SNAPSHOT = json.load(f)
+
+def restore_config_if_changed():
+    try:
+        current = load_config()
+        if current != CONFIG_SNAPSHOT:
+            atomic_write_json(CONFIG_PATH, CONFIG_SNAPSHOT)
+            changed = sorted(k for k in set(current) | set(CONFIG_SNAPSHOT) if current.get(k) != CONFIG_SNAPSHOT.get(k))
+            print(colored(f"[INFO] Restored config.json to its pre-audit state (reverted: {', '.join(changed)}).", Colors.BLUE))
+    except (OSError, ValueError) as e:
+        print(colored(f"[FAIL] Could not verify/restore config.json - please check it manually: {e}", Colors.RED + Colors.BOLD))
+
+atexit.register(restore_config_if_changed)
+
 
 # ----------------------------------------------------------------
 # PART 1: HTTP API HARDENING AUDIT
@@ -63,28 +97,52 @@ print(colored("--- PART 1: HTTP API Security Controls ---", Colors.CYAN + Colors
 
 # To test the newly hardened code, we must terminate any old server running on Port 8000
 # and start a clean instance of the updated modules/http_api.py.
+def find_listening_pids(port):
+    """Return the PIDs of processes listening on a TCP port (Windows, Linux and macOS)."""
+    pids = set()
+    if os.name == "nt":
+        output = subprocess.check_output(["netstat", "-ano"], text=True, errors="ignore")
+        for line in output.splitlines():
+            parts = line.split()
+            if "LISTENING" in parts and len(parts) >= 2 and parts[1].endswith(f":{port}"):
+                pids.add(int(parts[-1]))
+        return pids
+    try:
+        result = subprocess.run(["lsof", "-t", f"-iTCP:{port}", "-sTCP:LISTEN"], capture_output=True, text=True)
+        pids.update(int(p) for p in result.stdout.split())  # lsof exits 1 when nothing is listening
+    except FileNotFoundError:
+        output = subprocess.check_output(["ss", "-ltnpH", f"sport = :{port}"], text=True, errors="ignore")
+        for line in output.splitlines():
+            pids.update(int(p) for p in re.findall(r"pid=(\d+)", line))
+    return pids
+
+def stop_process(pid):
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
+    else:
+        os.kill(pid, signal.SIGTERM)
+
 print(colored("[INFO] Clearing any active process on Port 8000 to ensure we test the newly updated, hardened server...", Colors.BLUE))
 try:
-    netstat = subprocess.check_output("netstat -ano", shell=True).decode('utf-8', errors='ignore')
-    for line in netstat.splitlines():
-        if ":8000" in line and "LISTENING" in line:
-            pid = line.strip().split()[-1]
-            print(f"  • Found process {pid} listening on port 8000. Terminating it...")
-            subprocess.run(f"taskkill /F /PID {pid}", shell=True, capture_output=True)
-            time.sleep(1.5)
-except Exception as e:
-    print(f"  • Note: Could not query/terminate existing port 8000 process: {e}")
+    for pid in find_listening_pids(8000):
+        if pid == os.getpid():
+            continue
+        print(f"  * Found process {pid} listening on port 8000. Terminating it...")
+        stop_process(pid)
+        time.sleep(1.5)
+except (OSError, subprocess.SubprocessError, ValueError) as e:
+    print(colored(f"  * WARNING: Could not query/terminate the existing port 8000 process ({e}). Stop it manually; results may be unreliable.", Colors.YELLOW))
 
 print(colored("[INFO] Starting a fresh instance of the hardened HTTP API Server...", Colors.BLUE))
 api_script = os.path.join(PROJECT_ROOT, "modules", "http_api.py")
 api_process = subprocess.Popen(
     [sys.executable, api_script],
-    stdout=subprocess.DEVNULL,
-    stderr=subprocess.DEVNULL,
     cwd=PROJECT_ROOT
 )
 # Wait for the server to spin up
 time.sleep(2.5)
+if api_process.poll() is not None:
+    print(colored(f"[FAIL] The HTTP API server exited immediately (code {api_process.returncode}) - see its output above.", Colors.RED + Colors.BOLD))
 
 def run_http_tests():
     url_cameras = "http://127.0.0.1:8000/api/cameras"
@@ -202,8 +260,8 @@ def test_mqtt_auth(user, password, desc):
         time.sleep(1)
         client.loop_stop()
     except Exception as e:
-        pass
-        
+        conn_result[0] = f"{type(e).__name__}: {e}"
+
     result_str = str(conn_result[0])
     if connected[0]:
         print(colored(f"[TEST AUTH] Connect as '{user}' / '{password}': ALLOWED.", Colors.YELLOW))
@@ -410,7 +468,8 @@ try:
         print(colored("  • SUCCESS: Attempt to overwrite sensitive settings was strictly BLOCKED by whitelist.", Colors.GREEN))
         try:
             print(f"    -> Error details: {r.json().get('error')}")
-        except: pass
+        except ValueError:
+            print("    -> (response body was not JSON)")
     else:
         print(colored("  • FAILURE: Protected settings successfully bypassed whitelist validation!", Colors.RED + Colors.BOLD))
 except Exception as e:
@@ -427,7 +486,8 @@ try:
         print(colored("  • SUCCESS: Attempt to inject invalid data type was strictly BLOCKED.", Colors.GREEN))
         try:
             print(f"    -> Error details: {r.json().get('error')}")
-        except: pass
+        except ValueError:
+            print("    -> (response body was not JSON)")
     else:
         print(colored("  • FAILURE: Invalid data type bypassed type verification!", Colors.RED + Colors.BOLD))
 except Exception as e:
@@ -444,7 +504,8 @@ try:
         print(colored("  • SUCCESS: Attempt to inject negative interval was strictly BLOCKED.", Colors.GREEN))
         try:
             print(f"    -> Error details: {r.json().get('error')}")
-        except: pass
+        except ValueError:
+            print("    -> (response body was not JSON)")
     else:
         print(colored("  • FAILURE: Negative range bypassed bounds verification!", Colors.RED + Colors.BOLD))
 except Exception as e:
@@ -452,9 +513,11 @@ except Exception as e:
 
 # 4. Valid, safe configuration preference update (Regression Check)
 try:
+    # Change the interval by one second so the update is observable; config.json is restored afterwards
+    original_interval = CONFIG_SNAPSHOT.get("DASHBOARD_INTERVAL", 30)
     safe_payload = {
-        "DASHBOARD_INTERVAL": 30,
-        "MQTT_DEBUG": False
+        "DASHBOARD_INTERVAL": original_interval + 1 if original_interval < 3600 else original_interval - 1,
+        "MQTT_DEBUG": bool(CONFIG_SNAPSHOT.get("MQTT_DEBUG", False))
     }
     r = requests.post(url_config, json=safe_payload, headers={"X-API-Key": api_key}, timeout=3)
     print(colored(f"[TEST ABUSE-4] Submit safe whitelisted preferences: Status Code = {r.status_code}", Colors.YELLOW))
@@ -465,6 +528,10 @@ try:
 except Exception as e:
     print(f"  • ERROR: {e}")
 
+print()
+
+# Put config.json back exactly as it was before the audit
+restore_config_if_changed()
 print()
 
 
@@ -489,12 +556,12 @@ if api_process:
 print(colored("[INFO] Relaunching the live, hardened HTTP API Server in the background...", Colors.BLUE))
 subprocess.Popen(
     [sys.executable, api_script],
-    stdout=subprocess.DEVNULL,
-    stderr=subprocess.DEVNULL,
     cwd=PROJECT_ROOT,
-    creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == 'nt' else 0
+    creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == 'nt' else 0,
+    start_new_session=(os.name != 'nt'),
 )
-print(colored("[OK] Hardened HTTP API is running and live.", Colors.GREEN))
+print(colored("[OK] Hardened HTTP API relaunched (new window on Windows; background process elsewhere).", Colors.GREEN))
+print(colored("     Close any stale HTTP API window from before the audit and restart other services that used port 8000.", Colors.YELLOW))
 
 print("\n==============================================")
 print(colored("            AUDIT COMPLETE                    ", Colors.GREEN + Colors.BOLD))

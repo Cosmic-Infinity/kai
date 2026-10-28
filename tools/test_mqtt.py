@@ -5,25 +5,40 @@ Run this script to verify that your MQTT broker is running and accessible.
 """
 
 import paho.mqtt.client as mqtt
+import os
 import time
 import sys
 
-BROKER_HOST = "localhost"
-BROKER_PORT = 1883
+# Add project root to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from modules.config_manager import get_config_namespace
+config = get_config_namespace()
+
+BROKER_HOST = config.MQTT_BROKER_HOST
+BROKER_PORT = config.MQTT_BROKER_PORT
+IS_DEV_MODE = bool(getattr(config, "DEV_MODE", False))
+
+TEST_TOPIC = "kai/test"
+
 
 def on_connect(client, userdata, flags, reason_code, properties):
     """Callback when connection attempt completes."""
     if reason_code == 0:
         print("[OK] Successfully connected to MQTT broker!")
         print(f"  Broker: {BROKER_HOST}:{BROKER_PORT}")
-        print("\nTesting publish/subscribe...")
-        
-        # Subscribe to test topic
-        client.subscribe("kai/test", qos=1)
-        
-        # Publish test message
-        client.publish("kai/test", "Hello MQTT!", qos=1)
-        
+
+        if IS_DEV_MODE:
+            print("\nTesting publish/subscribe...")
+            client.subscribe(TEST_TOPIC, qos=1)
+            client.publish(TEST_TOPIC, "Hello MQTT!", qos=1)
+        else:
+            # The monitor account used here is read-only (ACL), so a publish
+            # round-trip is only possible in developer mode.
+            print("\n[INFO] Production mode: authenticated with the read-only monitor account.")
+            print("  Skipping publish/subscribe round-trip (publishing is blocked by ACL).")
+            client.disconnect()
+
     else:
         error_messages = {
             1: "Connection refused - incorrect protocol version",
@@ -34,7 +49,7 @@ def on_connect(client, userdata, flags, reason_code, properties):
         }
         print(f"[FAIL] Connection failed!")
         print(f"  Error code: {reason_code}")
-        print(f"  Error: {error_messages.get(reason_code, 'Unknown error')}")
+        print(f"  Error: {error_messages.get(getattr(reason_code, 'value', reason_code), 'Unknown error')}")
         sys.exit(1)
 
 def on_disconnect(client, userdata, flags, reason_code, properties):
@@ -49,53 +64,44 @@ def on_message(client, userdata, msg):
     print(f"  Topic: {msg.topic}")
     print(f"  Payload: {payload}")
     print("\n[OK] All tests passed! MQTT broker is working correctly.")
-    
+
     # Disconnect after successful test
     client.disconnect()
 
-    # Import config dynamically
-    import os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from modules.config_manager import get_config_namespace
-    config = get_config_namespace()
-    
-    broker_host = config.MQTT_BROKER_HOST
-    broker_port = config.MQTT_BROKER_PORT
-    
-    print(f"\nAttempting to connect to broker at {broker_host}:{broker_port}...")
-    
+def main():
+    print(f"\nAttempting to connect to broker at {BROKER_HOST}:{BROKER_PORT}...")
+
     # Create client with callback API version 2
     client = mqtt.Client(client_id="kai_test_client", callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
     client.on_message = on_message
-    
+
     # Set credentials
-    is_dev_mode = getattr(config, "DEV_MODE", False)
     username = config.MQTT_USERNAME
     password = config.MQTT_PASSWORD
-    
-    if not is_dev_mode:
+
+    if not IS_DEV_MODE:
         # Test connection using the monitor credentials
         username = getattr(config, "MQTT_USER_MONITOR", "kai_monitor")
         password = getattr(config, "MQTT_PASSWORD_MONITOR", None) or password
-        
+
     if username and password:
         client.username_pw_set(username, password)
-        
+
     try:
         # Connect to broker
-        client.connect(broker_host, broker_port, 60)
-        
+        client.connect(BROKER_HOST, BROKER_PORT, 60)
+
         # Start loop with timeout
         client.loop_start()
-        
+
         # Wait for messages
         time.sleep(3)
-        
+
         # Stop loop
         client.loop_stop()
-        
+
     except ConnectionRefusedError:
         print("\n[FAIL] Connection refused!")
         print("  Make sure the MQTT broker (Mosquitto) is running.")
@@ -103,7 +109,7 @@ def on_message(client, userdata, msg):
         print("  Linux:   sudo systemctl start mosquitto")
         print("  Mac:     brew services start mosquitto")
         sys.exit(1)
-        
+
     except Exception as e:
         print(f"\n[FAIL] Error connecting to broker: {e}")
         print(f"  Type: {type(e).__name__}")

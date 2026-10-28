@@ -66,7 +66,8 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } else {
       setState(() {
-        _errorMessage = 'Could not reach server at $host:8000. Verify the IP/Port and server status.';
+        final reason = provider.lastApiError ?? 'Unknown error.';
+        _errorMessage = 'Could not connect to $host:8000 - $reason';
       });
     }
   }

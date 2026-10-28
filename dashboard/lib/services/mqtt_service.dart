@@ -116,19 +116,30 @@ class MqttService {
     );
   }
 
-  /// Publishes a force update request for a camera
-  void publishForceUpdateRequest(String cameraId) {
-    if (!isConnected || _client == null) return;
-    final builder = MqttClientPayloadBuilder()..addString('FORCE_UPDATE_$cameraId');
-    _client!.publishMessage(topicForceRequest, MqttQos.atLeastOnce, builder.payload!);
-    debugPrint('[MqttService] Force update request → $cameraId');
+  /// Publishes a force update request for a camera. Returns false if it could not be sent.
+  bool publishForceUpdateRequest(String cameraId) {
+    return _publish(topicForceRequest, 'FORCE_UPDATE_$cameraId');
   }
 
-  /// Publishes a power toggle command for a camera
-  void publishControlCommand(String cameraId, String state) {
-    if (!isConnected || _client == null) return;
-    final builder = MqttClientPayloadBuilder()..addString('SET_${cameraId}_${state.toUpperCase()}');
-    _client!.publishMessage(topicControl, MqttQos.atLeastOnce, builder.payload!);
-    debugPrint('[MqttService] Control command → SET_${cameraId}_$state');
+  /// Publishes a power toggle command for a camera. Returns false if it could not be sent.
+  bool publishControlCommand(String cameraId, String state) {
+    return _publish(topicControl, 'SET_${cameraId}_${state.toUpperCase()}');
+  }
+
+  bool _publish(String topic, String payload) {
+    if (!isConnected || _client == null) {
+      debugPrint('[MqttService] Not connected - dropped $payload');
+      return false;
+    }
+    try {
+      final builder = MqttClientPayloadBuilder()..addString(payload);
+      _client!.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
+      debugPrint('[MqttService] $topic → $payload');
+      return true;
+    } catch (e) {
+      // Socket can die between the state check and the write
+      debugPrint('[MqttService] Publish failed for $payload: $e');
+      return false;
+    }
   }
 }

@@ -1,4 +1,5 @@
 {
+    "_NOTICE": "SAMPLE VALUES - the credentials and API key in this file are demo placeholders that ship with the repository. Run `python configure_kai.py` to generate your own before any real deployment (the wizard also removes this notice).",
     "IMAGE_SERVER_INTERVAL": 60,
     "DASHBOARD_INTERVAL": 30,
     "CONTROL_SERVER_INTERVAL": 30,

@@ -6,7 +6,7 @@ import time
 import threading
 import uuid
 from collections import defaultdict, deque
-from typing import Iterable, List, Dict, Callable, Optional
+from typing import List, Dict, Optional
 
 import paho.mqtt.client as mqtt
 
@@ -39,7 +39,6 @@ class MQTTFeedManager:
         self._client: Optional[mqtt.Client] = None
         self._connected = False
         self._message_queues: Dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
-        self._subscriptions: Dict[str, List[Callable]] = defaultdict(list)
         self._lock = threading.RLock()
         self._connect_thread = None
         
@@ -50,22 +49,8 @@ class MQTTFeedManager:
             "POWER": config.TOPIC_POWER,
         }
         
-        self.host = config.MQTT_BROKER_HOST
-        self.port = config.MQTT_BROKER_PORT
-        
         self._initialize_client()
         
-    def configure(self, host: str, port: int, username: str = None, password: str = None):
-        self.host = host
-        self.port = port
-        config.MQTT_BROKER_HOST = host
-        config.MQTT_BROKER_PORT = port
-        if username:
-            config.MQTT_USERNAME = username
-            config.MQTT_PASSWORD = password
-            if self._client:
-                self._client.username_pw_set(username, password)
-                
     def configure_role(self, role: str):
         """Set the module role explicitly and reload isolated credentials."""
         self.role = role
@@ -75,8 +60,7 @@ class MQTTFeedManager:
     def _initialize_client(self):
         """Initialize the MQTT client with configuration."""
         # Use timestamp + UUID for truly unique client IDs to prevent collisions
-        import time as _time
-        client_id = f"{config.MQTT_CLIENT_ID_PREFIX}_{int(_time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
+        client_id = f"{config.MQTT_CLIENT_ID_PREFIX}_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
         
         # Create client with clean session and handle paho-mqtt 1.x and 2.x compatibility
         try:
@@ -137,16 +121,6 @@ class MQTTFeedManager:
         if not self._connect_thread:
             self._start_connection()
 
-    def start(self):
-        """Force a reconnect using the current configuration."""
-        self._connected = False
-        if self._client:
-            try:
-                self._client.disconnect()
-            except Exception as e:
-                print(f"[MQTT] Disconnect error: {e}")
-        self._start_connection()
-
     def _start_connection(self):
         """Start MQTT connection in a background thread."""
         if self._connect_thread and self._connect_thread.is_alive():
@@ -159,6 +133,7 @@ class MQTTFeedManager:
         """Connection loop with retry logic."""
         attempt = 0
         from config_manager import load_config
+        reconnect_delay = config.MQTT_RECONNECT_DELAY
         
         while True:
             try:
@@ -342,85 +317,18 @@ class MQTTFeedManager:
             self._message_queues[topic].clear()
         return messages
     
-    def peek(self, feed_name: str) -> List[str]:
-        """
-        Peek at pending messages without consuming them.
-        
-        Args:
-            feed_name: Name of the feed
-            
-        Returns:
-            List of messages (strings)
-        """
-        self._ensure_connection_started()
-        topic = self._get_topic(feed_name)
-        with self._lock:
-            return list(self._message_queues[topic])
-    
-    def clear(self, feed_name: str):
-        """
-        Clear all pending messages from a feed.
-        
-        Args:
-            feed_name: Name of the feed
-        """
-        self._ensure_connection_started()
-        topic = self._get_topic(feed_name)
-        with self._lock:
-            self._message_queues[topic].clear()
-    
-    def is_connected(self) -> bool:
-        """Check if connected to MQTT broker."""
-        self._ensure_connection_started()
-        return self._connected
-    
-    def disconnect(self):
-        """Disconnect from the MQTT broker."""
-        if self._client:
-            self._client.loop_stop()
-            self._client.disconnect()
-            self._connected = False
-
-
 # Global manager instance
 _manager = MQTTFeedManager()
-feed_manager = _manager
 
-# Public API - maintains compatibility with file-based system
-def append_message(feed_name: str, message: str) -> None:
-    """Publish a single message to the specified feed."""
-    _manager.publish(feed_name, message)
-
-
-def append_messages(feed_name: str, messages: Iterable[str]) -> None:
-    """Publish multiple messages to the specified feed."""
-    for message in messages:
-        _manager.publish(feed_name, str(message))
+# Public API
+def append_message(feed_name: str, message: str) -> bool:
+    """Publish a single message to the specified feed. Returns True if it was published."""
+    return _manager.publish(feed_name, message)
 
 
 def consume_messages(feed_name: str) -> List[str]:
     """Return all pending messages for the feed and clear it."""
     return _manager.consume(feed_name)
-
-
-def peek_messages(feed_name: str) -> List[str]:
-    """Return all pending messages for the feed without clearing it."""
-    return _manager.peek(feed_name)
-
-
-def clear_feed(feed_name: str) -> None:
-    """Remove all pending messages from the feed."""
-    _manager.clear(feed_name)
-
-
-def is_connected() -> bool:
-    """Check if connected to MQTT broker."""
-    return _manager.is_connected()
-
-
-def disconnect() -> None:
-    """Disconnect from MQTT broker."""
-    _manager.disconnect()
 
 
 def configure_role(role: str) -> None:

@@ -1,13 +1,14 @@
 import os
 import sys
 import json
+import hmac
 import logging
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
 
 # Setup path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config_manager import load_config
+from config_manager import load_config, save_config, load_power_state, load_frame_log
 
 from logger import configure_logging
 configure_logging(logging.INFO)
@@ -16,6 +17,8 @@ IMAGE_DIR = os.path.join(PROJECT_ROOT, "images_ready")
 
 def discover_cameras():
     cameras = {}
+    power_states = load_power_state()
+    frames = load_frame_log()
     try:
         for filename in os.listdir(IMAGE_DIR):
             stem, ext = os.path.splitext(filename)
@@ -30,15 +33,24 @@ def discover_cameras():
                 "status": status,
                 "bboxes": []
             }
+            # Last power state published by the control server (omitted until one exists)
+            if camera_id in power_states:
+                cameras[camera_id]["power_state"] = power_states[camera_id]
+            # Epoch seconds: when the frame was taken, and when the image server last analysed it
+            if camera_id in frames:
+                cameras[camera_id]["captured_at"] = frames[camera_id].get("captured_at")
+                cameras[camera_id]["processed_at"] = frames[camera_id].get("processed_at")
+                cameras[camera_id]["camera_clock_offset"] = frames[camera_id].get("camera_clock_offset")
             # Attempt to load bboxes
             bbox_path = os.path.join(IMAGE_DIR, f"{camera_id}_bboxes.json")
             if os.path.exists(bbox_path):
                 try:
                     with open(bbox_path, 'r') as f:
                         cameras[camera_id]["bboxes"] = json.load(f)
-                except: pass
+                except (OSError, ValueError) as e:
+                    logging.warning(f"Could not read bounding boxes for {camera_id}: {e}")
     except FileNotFoundError:
-        pass
+        logging.warning(f"Image directory '{IMAGE_DIR}' not found; no cameras to report.")
     return cameras
 
 class KAIRequestHandler(SimpleHTTPRequestHandler):
@@ -54,7 +66,7 @@ class KAIRequestHandler(SimpleHTTPRequestHandler):
             if auth_header.startswith("Bearer "):
                 client_key = auth_header[7:].strip()
                 
-        return client_key == server_key
+        return hmac.compare_digest(client_key.encode('utf-8'), server_key.encode('utf-8'))
 
     def send_unauthorized(self):
         self.send_response(401)
@@ -119,9 +131,9 @@ class KAIRequestHandler(SimpleHTTPRequestHandler):
             
         parsed = urlparse(self.path)
         if parsed.path == "/api/config":
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
             try:
+                content_length = int(self.headers.get('Content-Length') or 0)
+                post_data = self.rfile.read(content_length)
                 updates = json.loads(post_data.decode('utf-8'))
                 logging.info(f"UI submitted configuration updates via HTTP POST: {updates}")
                 
@@ -178,15 +190,24 @@ class KAIRequestHandler(SimpleHTTPRequestHandler):
                 for key, val in updates.items():
                     current_config[key] = val
                     
-                from config_manager import save_config
-                save_config(current_config)
-                
+                try:
+                    save_config(current_config)
+                except OSError as e:
+                    logging.error(f"Failed to save configuration: {e}")
+                    self.send_response(500)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": f"Could not save configuration: {e}"}).encode('utf-8'))
+                    return
+
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(json.dumps({"status": "success"}).encode('utf-8'))
-            except Exception as e:
+            except (ValueError, AttributeError) as e:
+                logging.warning(f"Rejected malformed config update: {e}")
                 self.send_error(400, f"Bad Request: {e}")
         else:
             self.send_error(404, "Not Found")
@@ -204,7 +225,8 @@ def run_server():
         
     port = 8000
     server_address = ('0.0.0.0', port)
-    httpd = HTTPServer(server_address, KAIRequestHandler)
+    # Threaded so the dashboard's parallel image fetches don't queue behind each other
+    httpd = ThreadingHTTPServer(server_address, KAIRequestHandler)
     logging.info(f"Starting HTTP API server on port {port}...")
     httpd.serve_forever()
 

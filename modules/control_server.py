@@ -14,7 +14,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IMAGE_DIR = os.path.join(PROJECT_ROOT, "images_ready")
 CONTROL_FEED = "control"
 POWER_FEED = "POWER"
-from config_manager import load_config
+from config_manager import load_config, load_power_state, save_power_state, load_frame_log, frame_stale_after
 from logger import kai_print as print
 
 
@@ -68,9 +68,27 @@ def read_control_feed() -> None:
         print(f"[Control] [FAST] Instantly processed command: {command}")
 
 
+_power_state: Dict[str, str] = load_power_state()
+_power_state_lock = threading.Lock()
+
+
+def _record_power_state(content: str) -> None:
+    """Remember the last published state per camera so the HTTP API can report it to dashboards."""
+    camera_id, state = content.rsplit("_", 1)
+    with _power_state_lock:
+        _power_state[camera_id] = state
+        try:
+            save_power_state(_power_state)
+        except OSError as e:
+            print(f"[Power] Could not persist power state: {e}")
+
+
 def write_to_power_feed(content: str) -> None:
     """Writes a command to the POWER feed."""
-    append_message(POWER_FEED, content)
+    if not append_message(POWER_FEED, content):
+        print(f"[Power] Failed to write '{content}' to {POWER_FEED}")
+        return
+    _record_power_state(content)
     print(f"[Power] Wrote '{content}' to {POWER_FEED}")
 
 
@@ -87,9 +105,18 @@ def control_command_loop() -> None:
 
 
 def camera_monitoring_loop() -> None:
-    """Monitors camera statuses and turns off power after consecutive 'NO' statuses."""
+    """
+    Monitors camera statuses and turns off power after consecutive 'NO' statuses.
+
+    This loop runs on its own timer (CONTROL_SERVER_INTERVAL), independent of the image
+    server's capture timer: every check reads whatever status is current, so the same frame
+    can be counted by several checks and the auto-off delay is
+    INACTIVITY_THRESHOLD x CONTROL_SERVER_INTERVAL. Frames the image server hasn't refreshed
+    recently are not evidence of anything - counting pauses for them until fresh frames arrive.
+    """
     print(f"[Monitoring Loop] Started - checking camera statuses based on dynamic configuration...")
     camera_inactivity_count: Dict[str, int] = {}
+    stale_cameras = set()
     last_check_time = 0
 
     while True:
@@ -101,7 +128,21 @@ def camera_monitoring_loop() -> None:
             current_time = time.time()
             if current_time - last_check_time >= interval:
                 statuses = get_camera_status()
+                frames = load_frame_log()
+                stale_after = frame_stale_after(config)
                 for cam_id, status in statuses.items():
+                    processed_at = frames.get(cam_id, {}).get("processed_at")
+                    if processed_at is None or current_time - processed_at > stale_after:
+                        if cam_id not in stale_cameras:
+                            age = "never processed" if processed_at is None else f"last processed {int(current_time - processed_at)}s ago"
+                            print(f"[Monitoring Loop] {cam_id}: frame is stale ({age}, limit {stale_after}s) - "
+                                  f"holding inactivity count at {camera_inactivity_count.get(cam_id, 0)}. Is the Image Server running?")
+                            stale_cameras.add(cam_id)
+                        continue
+                    if cam_id in stale_cameras:
+                        print(f"[Monitoring Loop] {cam_id}: fresh frames again - resuming inactivity tracking.")
+                        stale_cameras.discard(cam_id)
+
                     if status == "NO":
                         camera_inactivity_count[cam_id] = camera_inactivity_count.get(cam_id, 0) + 1
                     else:

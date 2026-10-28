@@ -53,8 +53,10 @@ class _DashboardScreenState extends State<DashboardScreen>
     if (currentConfig == null) {
       if (context.mounted) {
         scaffoldMessenger.showSnackBar(
-          const SnackBar(
-            content: Text('Failed to load system settings from server'),
+          SnackBar(
+            content: Text(
+              'Failed to load system settings: ${provider.lastApiError ?? 'unknown error'}',
+            ),
           ),
         );
       }
@@ -1099,7 +1101,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                 context,
                 'Inactivity Shutdown Threshold',
                 thresholdController,
-                'Number of consecutive "Empty" readings before room appliances are automatically turned off.',
+                'Number of consecutive Control Server checks that find the room "Empty" before its appliances are automatically turned off. Checks run on the Control Server interval, independently of image capture, so the delay is roughly this value × the Control Server interval.',
               ),
               const SizedBox(height: 16),
 
@@ -1157,7 +1159,11 @@ class _SettingsDialogState extends State<_SettingsDialog> {
               );
             } else {
               scaffoldMessenger.showSnackBar(
-                const SnackBar(content: Text('Error updating server settings')),
+                SnackBar(
+                  content: Text(
+                    'Error updating server settings: ${widget.provider.lastApiError ?? 'unknown error'}',
+                  ),
+                ),
               );
             }
           },

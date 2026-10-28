@@ -729,14 +729,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                       ),
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () => provider.clearFilters(),
-                    child: Text(
+                  TextButton(
+                    onPressed: () => provider.clearFilters(),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      minimumSize: const Size(48, 36),
+                    ),
+                    child: const Text(
                       'Clear',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                   ),
@@ -745,7 +748,10 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
 
           if (!provider.isMqttConnected)
-            GestureDetector(
+            Semantics(
+              button: true,
+              label: 'Reconnect to the MQTT broker',
+              child: GestureDetector(
               onTap: () {
                 ScaffoldMessenger.of(context).clearSnackBars();
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -810,6 +816,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
               ),
             ),
+            ),
 
           // Grid View Area
           Expanded(
@@ -821,7 +828,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           : columns > 4
                           ? 12.0
                           : 16.0,
-                    ),
+                    ) + MediaQuery.paddingOf(context).copyWith(top: 0),
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: columns,
                       crossAxisSpacing: columns > 6

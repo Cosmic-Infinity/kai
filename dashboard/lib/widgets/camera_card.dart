@@ -100,7 +100,6 @@ class CameraCard extends StatelessWidget {
       child: InkWell(
         onTap: () => showDialog(
           context: context,
-          useSafeArea: false,
           builder: (_) => FullscreenPreview(camera: camera),
         ),
         child: LayoutBuilder(
@@ -118,14 +117,28 @@ class CameraCard extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
+                      isCompact
+                          ? Icon(
+                              isOccupied
+                                  ? Icons.person
+                                  : isEmpty
+                                  ? Icons.person_off_outlined
+                                  : Icons.help_outline,
+                              size: 14,
+                              color: statusColor,
+                              semanticLabel: 'Status: $statusText, power ${camera.powerState}',
+                            )
+                          : Semantics(
+                              label: 'Status: $statusText',
+                              child: Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: statusColor,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -254,12 +267,13 @@ class CameraCard extends StatelessWidget {
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 16,
-                                        vertical: 6,
+                                        vertical: 12,
                                       ),
                                       child: Icon(
                                         isPowerOn
                                             ? Icons.power_settings_new
                                             : Icons.power_off,
+                                        semanticLabel: isPowerOn ? 'Shut down room power' : 'Activate room power',
                                         size: 18,
                                         color: isPowerOn
                                             ? _colorSuccess
@@ -278,7 +292,7 @@ class CameraCard extends StatelessWidget {
                                   const Padding(
                                     padding: EdgeInsets.symmetric(
                                       horizontal: 16,
-                                      vertical: 6,
+                                      vertical: 12,
                                     ),
                                     child: SizedBox(
                                       height: 18,
@@ -300,12 +314,15 @@ class CameraCard extends StatelessWidget {
                                       child: const Padding(
                                         padding: EdgeInsets.symmetric(
                                           horizontal: 16,
-                                          vertical: 6,
+                                          vertical: 12,
                                         ),
-                                        child: Icon(
-                                          Icons.refresh,
-                                          size: 18,
-                                          color: Colors.white70,
+                                        child: Tooltip(
+                                          message: 'Request a fresh frame now',
+                                          child: Icon(
+                                            Icons.refresh,
+                                            size: 18,
+                                            color: Colors.white70,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -367,7 +384,7 @@ class CameraCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         SizedBox(
-                          width: 42,
+                          width: 48,
                           child: Opacity(
                             opacity: isMqttConnected ? 1.0 : 0.5,
                             child: ElevatedButton(
@@ -398,7 +415,7 @@ class CameraCard extends StatelessWidget {
                                         color: Colors.blue,
                                       ),
                                     )
-                                  : const Icon(Icons.refresh, size: 18),
+                                  : const Tooltip(message: 'Request a fresh frame now', child: Icon(Icons.refresh, size: 18)),
                             ),
                           ),
                         ),

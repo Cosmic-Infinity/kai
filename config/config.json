@@ -27,6 +27,6 @@
     "MQTT_PASSWORD_CONTROL_SERVER": "e8de23ce7ab4cc0becac46ee832eded4",
     "MQTT_USER_MONITOR": "kai_monitor",
     "MQTT_PASSWORD_MONITOR": "db8632f002971fa19d77ba8231daaff2",
-    "MQTT_USER_POWER_FEED": "haie",
+    "MQTT_USER_POWER_FEED": "kaie",
     "MQTT_PASSWORD_POWER_FEED": "kaie"
 }

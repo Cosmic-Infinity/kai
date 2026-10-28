@@ -199,6 +199,27 @@ python configure_kai.py
 > [!WARNING]
 > **The `config/config.json` committed to this repository contains SAMPLE credentials only** (dashboard login, edge device login, internal server passwords and the HTTP API key) so the application can be showcased. They are public and must never be used for a real deployment. Run `python configure_kai.py` to replace them: the internal server passwords are regenerated as random 128-bit values (`secrets.token_hex(16)`), and you choose your own dashboard / edge device passwords and API key. While the sample values are still in place, the config carries a `_NOTICE` entry and `start.py` prints a warning; the wizard removes the notice once real credentials are set.
 
+### Default Credentials
+
+These are the values that ship with the repository, so the system can be tried out straight away. **They are public and for demo use only.** Run `python configure_kai.py` to replace them before any real deployment.
+
+**Sample deployment (the committed `config/config.json`, production/isolated mode):**
+
+| Role | Username | Password / Key | Used by |
+| :--- | :--- | :--- | :--- |
+| Dashboard (MQTT) | `kaid` | `kaid` | Flutter dashboard login |
+| HTTP API key | - | `kaih` | Flutter dashboard login (`X-API-Key`) |
+| Edge device (MQTT) | `haie` | `kaie` | Appliances / relays subscribing to `kai/power` |
+| Image Server (MQTT) | `kai_image_server` | `1c3d28c3ebc71cf4ff2cd3de7dce3e4e` | `modules/image_server.py` (internal) |
+| Control Server (MQTT) | `kai_control_server` | `e8de23ce7ab4cc0becac46ee832eded4` | `modules/control_server.py` (internal) |
+| Traffic Monitor (MQTT) | `kai_monitor` | `db8632f002971fa19d77ba8231daaff2` | `tools/monitor_mqtt.py`, `tools/test_mqtt.py` (internal) |
+
+To log in to the dashboard, enter the **Host** (the IP address of the machine running kai), username `kaid`, password `kaid`, and API key `kaih`. The internal accounts are only used between the backend modules; you never type them in.
+
+**Developer mode** (`configure_kai.py` → option 3, default answers): every component shares one account, `kai_admin` / `kai_developer`, and the HTTP API key is `testtest`. Feed isolation is disabled in this mode.
+
+**Built-in fallback**: if `config/config.json` is missing, `modules/config_manager.py` recreates it with `kai_admin` / `kai` and API key `testtest`. These only work after the broker has been configured with them, for example by the wizard.
+
 ```python
 # Broker settings (config/config.json)
 MQTT_BROKER_HOST = "127.0.0.1"

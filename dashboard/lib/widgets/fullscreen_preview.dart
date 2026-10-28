@@ -103,7 +103,7 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
       backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 32.0),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
         child: Container(
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9), // slate-900 / slate-100
@@ -113,7 +113,7 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
               width: 1,
             ),
           ),
-          child: SafeArea(
+          child: _ScrollWhenShort(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -156,6 +156,7 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.close),
+                        tooltip: 'Close preview',
                         onPressed: () => Navigator.of(context).pop(),
                         color: isDark ? Colors.white : Colors.black87,
                       ),
@@ -266,8 +267,9 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
                 padding: const EdgeInsets.all(16.0),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final screenWidth = MediaQuery.of(context).size.width;
-                    final isMobile = screenWidth < 500;
+                    // Stack the controls whenever the single-row layout wouldn't fit the toolbar's
+                    // actual width (narrow screens, or large accessibility text in landscape)
+                    final isMobile = constraints.maxWidth < MediaQuery.textScalerOf(context).scale(460);
 
                     if (isMobile) {
                       return Column(
@@ -325,7 +327,7 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
                               ),
                               const SizedBox(width: 8),
                               SizedBox(
-                                height: 38,
+                                height: 48,
                                 width: 56,
                                 child: Opacity(
                                   opacity: isMqttConnected ? 1.0 : 0.5,
@@ -349,7 +351,7 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
                                             width: 16,
                                             child: CircularProgressIndicator(strokeWidth: 2),
                                           )
-                                        : const Icon(Icons.refresh, size: 18),
+                                        : const Tooltip(message: 'Request a fresh frame now', child: Icon(Icons.refresh, size: 18)),
                                   ),
                                 ),
                               ),
@@ -447,6 +449,27 @@ class _FullscreenPreviewState extends State<FullscreenPreview> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Gives the lightbox a usable minimum height. On short screens (phones in landscape,
+/// large accessibility text) the content scrolls instead of squashing the image or overflowing.
+class _ScrollWhenShort extends StatelessWidget {
+  final Widget child;
+
+  const _ScrollWhenShort({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final minHeight = MediaQuery.textScalerOf(context).scale(440);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxHeight >= minHeight) return child;
+        return SingleChildScrollView(
+          child: SizedBox(height: minHeight, child: child),
+        );
+      },
     );
   }
 }
